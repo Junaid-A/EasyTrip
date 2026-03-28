@@ -62,12 +62,30 @@ export default function ReviewPage() {
                     Premium stay selected in package
                   </p>
                 </div>
+
                 <div className="rounded-[24px] bg-slate-50 p-5">
                   <p className="text-sm font-medium text-slate-500">Transfers</p>
                   <p className="mt-2 font-semibold text-slate-950">
                     Private airport and city transfers
                   </p>
                 </div>
+
+                <div className="rounded-[24px] bg-slate-50 p-5">
+                  <p className="text-sm font-medium text-slate-500">
+                    Room Preference
+                  </p>
+                  <p className="mt-2 font-semibold text-slate-950">
+                    {roomPreference}
+                  </p>
+                </div>
+
+                <div className="rounded-[24px] bg-slate-50 p-5">
+                  <p className="text-sm font-medium text-slate-500">Travelers</p>
+                  <p className="mt-2 font-semibold text-slate-950">
+                    {adults} Adults
+                  </p>
+                </div>
+
                 <div className="rounded-[24px] bg-slate-50 p-5 sm:col-span-2">
                   <p className="text-sm font-medium text-slate-500">
                     Selected Add-ons
@@ -89,7 +107,8 @@ export default function ReviewPage() {
                     )}
                   </div>
                 </div>
-                <div className="rounded-[24px] bg-slate-50 p-5">
+
+                <div className="rounded-[24px] bg-slate-50 p-5 sm:col-span-2">
                   <p className="text-sm font-medium text-slate-500">Meals</p>
                   <p className="mt-2 font-semibold text-slate-950">
                     Daily breakfast + selected premium options
@@ -121,24 +140,28 @@ export default function ReviewPage() {
                       ₹{selectedPackagePrice.toLocaleString("en-IN")}
                     </span>
                   </div>
+
                   <div className="flex justify-between">
                     <span className="text-slate-500">Selected add-ons</span>
                     <span className="font-medium text-slate-950">
                       {selectedAddOns.length}
                     </span>
                   </div>
+
                   <div className="flex justify-between">
                     <span className="text-slate-500">Add-ons total</span>
                     <span className="font-medium text-slate-950">
                       ₹{addOnsTotal.toLocaleString("en-IN")}
                     </span>
                   </div>
+
                   <div className="flex justify-between">
                     <span className="text-slate-500">Markup / service</span>
                     <span className="font-medium text-slate-950">
                       ₹{serviceFee.toLocaleString("en-IN")}
                     </span>
                   </div>
+
                   <div className="flex justify-between border-t border-slate-200 pt-4">
                     <span className="text-slate-700">Final Price</span>
                     <span className="text-lg font-semibold text-slate-950">
@@ -150,11 +173,11 @@ export default function ReviewPage() {
 
               <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.05)]">
                 <p className="text-sm font-medium text-sky-700">
-                  Trust Positioning
+                  Booking Reference
                 </p>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  The final review page should feel calmer and more authoritative
-                  than a cluttered booking summary.
+                  This prototype booking will be confirmed against reference{" "}
+                  <span className="font-semibold text-slate-950">{bookingId}</span>.
                 </p>
               </div>
 
@@ -165,6 +188,7 @@ export default function ReviewPage() {
                 >
                   Confirm Prototype Booking
                 </Link>
+
                 <Link
                   href="/customize"
                   className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"

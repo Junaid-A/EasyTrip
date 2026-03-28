@@ -25,13 +25,14 @@ export default function CustomizePage() {
   );
   const selectedAddOns = useTripBuilderStore((state) => state.selectedAddOns);
   const roomPreference = useTripBuilderStore((state) => state.roomPreference);
+  const serviceFee = useTripBuilderStore((state) => state.serviceFee);
   const toggleAddOn = useTripBuilderStore((state) => state.toggleAddOn);
   const setRoomPreference = useTripBuilderStore(
     (state) => state.setRoomPreference
   );
 
   const addOnsTotal = selectedAddOns.length * 3250;
-  const total = selectedPackagePrice + addOnsTotal;
+  const total = selectedPackagePrice + addOnsTotal + serviceFee;
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#f8fafc_35%,#ffffff_100%)]">
@@ -147,6 +148,12 @@ export default function CustomizePage() {
                     <span className="text-slate-500">Add-ons total</span>
                     <span className="font-medium text-slate-950">
                       ₹{addOnsTotal.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Markup / service</span>
+                    <span className="font-medium text-slate-950">
+                      ₹{serviceFee.toLocaleString("en-IN")}
                     </span>
                   </div>
                   <div className="flex justify-between border-t border-slate-200 pt-4">

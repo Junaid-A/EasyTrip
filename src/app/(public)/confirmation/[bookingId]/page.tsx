@@ -96,9 +96,23 @@ export default function ConfirmationPage() {
               </div>
 
               <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
+                <p className="text-sm text-slate-500">Package Base</p>
+                <p className="mt-2 font-semibold text-slate-950">
+                  ₹{selectedPackagePrice.toLocaleString("en-IN")}
+                </p>
+              </div>
+
+              <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
                 <p className="text-sm text-slate-500">Add-ons Total</p>
                 <p className="mt-2 font-semibold text-slate-950">
                   ₹{addOnsTotal.toLocaleString("en-IN")}
+                </p>
+              </div>
+
+              <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
+                <p className="text-sm text-slate-500">Markup / Service</p>
+                <p className="mt-2 font-semibold text-slate-950">
+                  ₹{serviceFee.toLocaleString("en-IN")}
                 </p>
               </div>
 
@@ -118,6 +132,7 @@ export default function ConfirmationPage() {
             >
               Go to Home
             </Link>
+
             <Link
               href="/trip-builder"
               className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
