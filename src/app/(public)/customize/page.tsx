@@ -46,11 +46,11 @@ export default function CustomizePage() {
                 Customize
               </span>
               <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-                Fine-tune the selected trip with cleaner add-ons and upgrades.
+                Personalize your trip with room upgrades and add-ons.
               </h1>
               <p className="mt-4 text-base leading-8 text-slate-600 sm:text-lg">
-                This page is positioned as a premium refinement layer before the
-                final review step.
+                Choose the extras you want and review the updated trip price
+                before moving ahead.
               </p>
             </div>
           </div>
@@ -64,7 +64,7 @@ export default function CustomizePage() {
                   {selectedPackageTitle}
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
-                  Selected package • Premium configuration
+                  Selected trip package
                 </p>
               </div>
 
@@ -116,10 +116,10 @@ export default function CustomizePage() {
 
               <div className="mt-8">
                 <h3 className="text-base font-semibold text-slate-950">
-                  Internal Notes
+                  Special Requests
                 </h3>
                 <textarea
-                  defaultValue="Keep the package premium but clean. Avoid too many sightseeing inclusions. Maintain strong conversion quality."
+                  placeholder="Add any preferences for room setup, meals, or airport assistance."
                   rows={5}
                   className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:bg-white"
                 />
@@ -129,7 +129,7 @@ export default function CustomizePage() {
             <aside className="space-y-6">
               <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.05)]">
                 <h2 className="text-lg font-semibold text-slate-950">
-                  Live Pricing Summary
+                  Trip Price Summary
                 </h2>
                 <div className="mt-5 space-y-4 text-sm">
                   <div className="flex justify-between">
@@ -151,13 +151,13 @@ export default function CustomizePage() {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Markup / service</span>
+                    <span className="text-slate-500">Service charges</span>
                     <span className="font-medium text-slate-950">
                       ₹{serviceFee.toLocaleString("en-IN")}
                     </span>
                   </div>
                   <div className="flex justify-between border-t border-slate-200 pt-4">
-                    <span className="text-slate-700">Total</span>
+                    <span className="text-slate-700">Total trip price</span>
                     <span className="text-lg font-semibold text-slate-950">
                       ₹{total.toLocaleString("en-IN")}
                     </span>
@@ -167,11 +167,11 @@ export default function CustomizePage() {
 
               <div className="rounded-[36px] border border-slate-200 bg-[linear-gradient(135deg,#020617_0%,#0f172a_35%,#1d4ed8_100%)] p-6 text-white shadow-[0_20px_70px_rgba(15,23,42,0.10)]">
                 <p className="text-sm font-medium text-sky-200">
-                  Upgrade Logic
+                  Good to know
                 </p>
                 <p className="mt-3 text-sm leading-7 text-white/80">
-                  Add-ons are shown as premium refinements rather than cluttered
-                  upsells. This makes the experience feel more curated and branded.
+                  Add-ons can help tailor the trip around comfort, convenience,
+                  and sightseeing preferences.
                 </p>
               </div>
 

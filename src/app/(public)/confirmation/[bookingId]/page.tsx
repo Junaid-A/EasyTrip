@@ -39,12 +39,12 @@ export default function ConfirmationPage() {
           </span>
 
           <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-            Booking prototype confirmed
+            Your booking request has been received
           </h1>
 
           <p className="mx-auto mt-4 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
-            This confirmation screen now reflects the selected package,
-            room preference, add-ons, and computed final pricing.
+            We’ve saved your selected trip details, preferences, and pricing
+            under the booking reference below.
           </p>
 
           <div className="mx-auto mt-10 max-w-3xl rounded-[32px] bg-slate-50 p-6 text-left sm:p-8">
@@ -110,7 +110,7 @@ export default function ConfirmationPage() {
               </div>
 
               <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
-                <p className="text-sm text-slate-500">Markup / Service</p>
+                <p className="text-sm text-slate-500">Service Charges</p>
                 <p className="mt-2 font-semibold text-slate-950">
                   ₹{serviceFee.toLocaleString("en-IN")}
                 </p>

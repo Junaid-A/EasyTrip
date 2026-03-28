@@ -33,11 +33,11 @@ export default function ReviewPage() {
                 Review
               </span>
               <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-                Review the final trip before confirmation.
+                Review your trip before confirming.
               </h1>
               <p className="mt-4 text-base leading-8 text-slate-600 sm:text-lg">
-                This screen acts as the last polished summary before the final
-                booking confirmation state.
+                Check your selected room, add-ons, and final pricing before
+                submitting the booking request.
               </p>
             </div>
           </div>
@@ -51,22 +51,22 @@ export default function ReviewPage() {
                   {selectedPackageTitle}
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
-                  {adults} Adults • {roomPreference} • Private transfers
+                  {adults} Adults • {roomPreference} • Selected trip summary
                 </p>
               </div>
 
               <div className="mt-8 grid gap-4 sm:grid-cols-2">
                 <div className="rounded-[24px] bg-slate-50 p-5">
-                  <p className="text-sm font-medium text-slate-500">Hotel</p>
+                  <p className="text-sm font-medium text-slate-500">Stay</p>
                   <p className="mt-2 font-semibold text-slate-950">
-                    Premium stay selected in package
+                    Hotel stay included in selected package
                   </p>
                 </div>
 
                 <div className="rounded-[24px] bg-slate-50 p-5">
                   <p className="text-sm font-medium text-slate-500">Transfers</p>
                   <p className="mt-2 font-semibold text-slate-950">
-                    Private airport and city transfers
+                    Airport and local transfer arrangements as per package
                   </p>
                 </div>
 
@@ -111,19 +111,18 @@ export default function ReviewPage() {
                 <div className="rounded-[24px] bg-slate-50 p-5 sm:col-span-2">
                   <p className="text-sm font-medium text-slate-500">Meals</p>
                   <p className="mt-2 font-semibold text-slate-950">
-                    Daily breakfast + selected premium options
+                    Meal inclusions will follow the selected package and add-ons
                   </p>
                 </div>
               </div>
 
               <div className="mt-8 rounded-[28px] border border-slate-200 p-5">
                 <h3 className="text-base font-semibold text-slate-950">
-                  Client-facing notes
+                  Booking Summary
                 </h3>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  This itinerary is positioned as a premium, smooth, and highly
-                  comfortable travel experience with stronger presentation and
-                  cleaner trip structuring.
+                  This trip has been tailored around your selected room type,
+                  travel preferences, and optional experiences.
                 </p>
               </div>
             </section>
@@ -156,7 +155,7 @@ export default function ReviewPage() {
                   </div>
 
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Markup / service</span>
+                    <span className="text-slate-500">Service charges</span>
                     <span className="font-medium text-slate-950">
                       ₹{serviceFee.toLocaleString("en-IN")}
                     </span>
@@ -176,7 +175,7 @@ export default function ReviewPage() {
                   Booking Reference
                 </p>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  This prototype booking will be confirmed against reference{" "}
+                  Your booking request will be recorded against reference{" "}
                   <span className="font-semibold text-slate-950">{bookingId}</span>.
                 </p>
               </div>
@@ -186,7 +185,7 @@ export default function ReviewPage() {
                   href={`/confirmation/${bookingId}`}
                   className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                 >
-                  Confirm Prototype Booking
+                  Confirm Booking Request
                 </Link>
 
                 <Link
