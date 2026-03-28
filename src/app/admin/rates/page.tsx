@@ -1,0 +1,23 @@
+import { PortalShell } from "@/components/shared/portal-shell";
+import { AdminSidebar } from "@/components/admin/admin-sidebar";
+import { InfoPanel } from "@/components/shared/info-panel";
+
+export default function AdminRatesPage() {
+  return (
+    <PortalShell
+      title="Rates"
+      subtitle="Customer pricing rules, agent pricing rules, markup guidance, and preferred rate cards."
+      sidebar={<AdminSidebar />}
+    >
+      <InfoPanel title="Rate Controls">
+        <div className="space-y-4">
+          {["Customer pricing rules", "Agent markup guidance", "Preferred inventory rates"].map((item) => (
+            <div key={item} className="rounded-[24px] bg-slate-50 p-5 text-sm text-slate-700">
+              {item}
+            </div>
+          ))}
+        </div>
+      </InfoPanel>
+    </PortalShell>
+  );
+}
