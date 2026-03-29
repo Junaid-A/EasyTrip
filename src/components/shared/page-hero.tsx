@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { HeroSearchCard } from "@/components/public/hero-search-card";
+import { AiHelperWidget } from "@/components/public/ai-helper-widget";
 
 type PageHeroProps = {
   eyebrow?: string;
@@ -24,12 +25,14 @@ export function PageHero({
 
   return (
     <>
-      <section className={`relative overflow-hidden px-3 pt-24 sm:px-5 sm:pt-28 ${className}`}>
+      <section
+        className={`mobile-bottom-search-safe relative overflow-hidden px-3 pt-24 sm:px-5 sm:pt-28 ${className}`}
+      >
         <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_top_left,rgba(251,191,36,0.22),transparent_28%),radial-gradient(circle_at_top_right,rgba(56,189,248,0.22),transparent_30%),linear-gradient(180deg,#f8f5ef_0%,#f5efe4_52%,#eef6fb_100%)]" />
         <div className="absolute inset-0 -z-10 opacity-[0.08] [background-image:radial-gradient(#0f172a_0.8px,transparent_0.8px)] [background-size:20px_20px]" />
 
         <div className="mx-auto max-w-7xl">
-          <div className="relative overflow-hidden rounded-[34px] border-[3px] border-black bg-[#f8f5ef] shadow-[0_26px_70px_rgba(15,23,42,0.12)] lg:rounded-[42px]">
+          <div className="hero-shell">
             <div className="absolute inset-0">
               <div className="absolute left-[-8%] top-[10%] h-[320px] w-[320px] rounded-full bg-amber-200/45 blur-3xl" />
               <div className="absolute right-[-8%] top-[5%] h-[320px] w-[320px] rounded-full bg-sky-200/45 blur-3xl" />
@@ -183,30 +186,39 @@ export function PageHero({
           </div>
         </div>
 
+        <div className="fixed inset-x-5 bottom-[142px] z-[72] hidden lg:block">
+          <div className="mx-auto max-w-5xl">
+            <AiHelperWidget compact className="mx-auto max-w-[920px]" />
+          </div>
+        </div>
+
         <div className="fixed inset-x-5 bottom-5 z-[72] hidden lg:block">
           <div className="mx-auto max-w-5xl">
             <HeroSearchCard compact />
           </div>
         </div>
 
-        <div className="fixed inset-x-3 bottom-3 z-[72] lg:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileSearchOpen(true)}
-            className="flex w-full items-center justify-between rounded-[24px] border border-white/10 bg-[#314746]/95 px-4 py-4 text-left text-white shadow-[0_18px_50px_rgba(15,23,42,0.20)] backdrop-blur-xl"
-          >
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60">
-                Search your trip
-              </p>
-              <p className="mt-1 text-sm font-medium text-white">
-                Destination, dates, budget
-              </p>
-            </div>
-            <span className="inline-flex rounded-full bg-yellow-400 px-4 py-2 text-sm font-bold text-slate-950">
-              Open
-            </span>
-          </button>
+        <div className="fixed inset-x-3 bottom-2 z-[72] lg:hidden">
+          <div className="space-y-1.5">
+            <AiHelperWidget compact />
+            <button
+              type="button"
+              onClick={() => setMobileSearchOpen(true)}
+              className="search-glass flex w-full items-center justify-between rounded-[20px] border border-white/10 px-4 py-2.5 text-left text-white"
+            >
+              <div>
+                <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/60">
+                  Search your trip
+                </p>
+                <p className="mt-0.5 text-[13px] font-medium text-white">
+                  Destination, dates, budget
+                </p>
+              </div>
+              <span className="inline-flex rounded-full bg-yellow-400 px-3.5 py-1.5 text-[13px] font-bold text-slate-950">
+                Open
+              </span>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -231,7 +243,7 @@ export function PageHero({
           </div>
 
           <div className="px-4 py-5">
-            <HeroSearchCard />
+            <HeroSearchCard mobile />
           </div>
         </div>
       ) : null}

@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { Rocket } from "lucide-react";
 
 type HeroSearchCardProps = {
   compact?: boolean;
   mobile?: boolean;
+  className?: string;
 };
 
 const bookingModes = ["Standard Packages", "AI Planner", "Fully Custom"];
@@ -15,10 +17,13 @@ const searchFields = [
 export function HeroSearchCard({
   compact = false,
   mobile = false,
+  className = "",
 }: HeroSearchCardProps) {
   if (mobile) {
     return (
-      <div className="rounded-[30px] border border-black/10 bg-white/90 p-3 shadow-[0_18px_50px_rgba(15,23,42,0.10)] backdrop-blur-xl">
+      <div
+        className={`rounded-[30px] border border-black/10 bg-white/90 p-3 shadow-[0_18px_50px_rgba(15,23,42,0.10)] backdrop-blur-xl ${className}`}
+      >
         <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
           {bookingModes.map((mode, index) => (
             <button
@@ -47,8 +52,10 @@ export function HeroSearchCard({
               Anytime • Budget optional
             </p>
           </div>
-          <span className="ml-4 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-300 text-lg text-slate-700">
-            →
+
+          <span className="ml-4 inline-flex items-center gap-2 rounded-full bg-yellow-400 px-4 py-2 text-sm font-bold text-slate-950 shadow-[0_10px_24px_rgba(251,191,36,0.28)]">
+            Search
+            <Rocket className="h-4 w-4" />
           </span>
         </Link>
       </div>
@@ -56,7 +63,9 @@ export function HeroSearchCard({
   }
 
   return (
-    <div className="rounded-[34px] border border-white/10 bg-[#314746]/94 p-3 text-white shadow-[0_24px_70px_rgba(15,23,42,0.22)] backdrop-blur-xl">
+    <div
+      className={`search-glass rounded-[34px] border border-white/10 p-3 text-white ${className}`}
+    >
       <div className="mb-3 flex flex-wrap gap-2">
         {bookingModes.map((mode, index) => (
           <button
@@ -96,9 +105,10 @@ export function HeroSearchCard({
 
         <Link
           href="/trip-builder"
-          className="inline-flex min-h-[60px] items-center justify-center rounded-full bg-yellow-400 px-7 text-sm font-bold text-slate-950 transition hover:bg-yellow-300"
+          className="inline-flex min-h-[60px] items-center justify-center gap-2 rounded-full bg-yellow-400 px-7 text-sm font-bold text-slate-950 transition hover:bg-yellow-300"
         >
-          Start Search
+          Search
+          <Rocket className="h-4 w-4" />
         </Link>
       </div>
     </div>

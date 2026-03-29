@@ -15,8 +15,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: monospace;
 }
 
 * {
@@ -74,11 +74,125 @@ img {
 }
 
 .mobile-bottom-search-safe {
-  padding-bottom: 110px;
+  padding-bottom: 120px;
 }
 
 @media (min-width: 1024px) {
   .mobile-bottom-search-safe {
     padding-bottom: 0;
+  }
+}
+
+.ai-widget-shell {
+  background: linear-gradient(
+    120deg,
+    rgba(56, 189, 248, 0.75),
+    rgba(168, 85, 247, 0.55),
+    rgba(251, 191, 36, 0.72),
+    rgba(56, 189, 248, 0.75)
+  );
+  background-size: 220% 220%;
+  animation: aiBorderShift 4.5s linear infinite;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.45),
+    0 18px 55px rgba(56, 189, 248, 0.16),
+    0 10px 30px rgba(168, 85, 247, 0.12);
+}
+
+.ai-widget-inner {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.9),
+    0 12px 35px rgba(15, 23, 42, 0.10);
+}
+
+.ai-widget-shine {
+  animation: aiShineSweep 3.2s ease-in-out infinite;
+}
+
+.ai-search-icon {
+  animation: aiSearchPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes aiBorderShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 220% 50%;
+  }
+}
+
+@keyframes aiShineSweep {
+  0% {
+    transform: translateX(-40px) rotate(12deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.55;
+  }
+  60% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateX(460px) rotate(12deg);
+    opacity: 0;
+  }
+}
+
+@keyframes aiSearchPulse {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  20% {
+    transform: translateY(-1px) scale(1.06);
+  }
+  50% {
+    transform: translateY(1px) scale(0.98);
+  }
+  75% {
+    transform: translateY(-1px) scale(1.03);
+  }
+}
+
+@keyframes partnersMarquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.partners-track {
+  animation: partnersMarquee 28s linear infinite;
+}
+
+.partners-track-reverse {
+  animation-direction: reverse;
+}
+
+.partners-track {
+  animation: partners-marquee 28s linear infinite;
+}
+
+.partners-track-reverse {
+  animation: partners-marquee-reverse 32s linear infinite;
+}
+
+@keyframes partners-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes partners-marquee-reverse {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0);
   }
 }

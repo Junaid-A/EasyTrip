@@ -4,12 +4,12 @@ import { WhyChooseUsGrid } from "@/components/public/why-choose-us-grid";
 import { DestinationHighlightCard } from "@/components/public/destination-highlight-card";
 import { PackagePreviewCard } from "@/components/public/package-preview-card";
 import { TestimonialCard } from "@/components/public/testimonial-card";
-import { AIHelperWidget } from "@/components/public/ai-helper-widget";
 import { SectionHeading } from "@/components/shared/section-heading";
 import { PageHero } from "@/components/shared/page-hero";
 import { destinations } from "@/data/destinations";
 import { packages } from "@/data/packages";
 import { testimonials } from "@/data/testimonials";
+import { PartnersMarquee } from "@/components/public/partners-marquee";
 
 export default function HomePage() {
   const featuredDestinations = destinations.slice(0, 4);
@@ -27,6 +27,7 @@ export default function HomePage() {
             title="Explore curated journeys built for smarter travel decisions."
             description="Discover curated packages, compare destinations, personalize your trip, and move from first search to final confirmation in a cleaner, more premium booking flow."
           />
+          <PartnersMarquee />
         </section>
 
         <section className="py-16 sm:py-20 lg:py-24">
@@ -156,7 +157,6 @@ export default function HomePage() {
         </section>
       </main>
 
-      <AIHelperWidget />
       <PublicFooter />
     </div>
   );
