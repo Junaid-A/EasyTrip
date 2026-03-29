@@ -122,6 +122,33 @@ img {
   }
 }
 
+@keyframes visualCardShine {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -40% 0;
+  }
+}
+
+@keyframes doorShine {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -40% 0;
+  }
+}
+
+@keyframes whyChooseShine {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -40% 0;
+  }
+}
+
 @keyframes aiShineSweep {
   0% {
     transform: translateX(-40px) rotate(12deg);

@@ -10,6 +10,7 @@ import { destinations } from "@/data/destinations";
 import { packages } from "@/data/packages";
 import { testimonials } from "@/data/testimonials";
 import { PartnersMarquee } from "@/components/public/partners-marquee";
+import { FaqSection } from "@/components/public/faq-section";
 
 export default function HomePage() {
   const featuredDestinations = destinations.slice(0, 4);
@@ -32,11 +33,13 @@ export default function HomePage() {
 
         <section className="py-16 sm:py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <SectionHeading
-              eyebrow="Why EasyTrip365"
-              title="Everything you need to plan with more clarity and less friction."
-              description="From package discovery to trip review, every step is designed to help travelers compare faster, decide better, and book with more confidence."
-            />
+
+ <SectionHeading
+  eyebrow="Why EasyTrip365"
+  title="A simpler, smarter way to plan vacations."
+  description="Choose ready packages, smarter AI suggestions, or a fully custom trip path."
+  align="center"
+/>
 
             <div className="mt-10">
               <WhyChooseUsGrid />
@@ -50,6 +53,7 @@ export default function HomePage() {
               eyebrow="Featured Destinations"
               title="Explore destinations that match your travel style."
               description="Browse standout locations, compare trip ideas, and start with options that already feel curated instead of overwhelming."
+            align="center"
             />
 
             <div className="mt-10 grid gap-6 lg:grid-cols-2">
@@ -68,36 +72,42 @@ export default function HomePage() {
         </section>
 
         <section className="py-16 sm:py-20 lg:py-24">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-              <SectionHeading
-                eyebrow="Curated Packages"
-                title="Packages that are easy to compare and easier to trust."
-                description="See the essentials at a glance, understand what is included, and move into customization without confusion."
-              />
-              <a
-                href="/results"
-                className="inline-flex rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-              >
-                View All Packages
-              </a>
-            </div>
+  <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div className="relative">
+      <div className="mx-auto max-w-3xl text-center">
+        <SectionHeading
+          eyebrow="Curated Packages"
+          title="Packages that are easy to compare and easier to trust."
+          description="See the essentials at a glance, understand what is included, and move into customization without confusion."
+          align="center"
+        />
+      </div>
 
-            <div className="mt-10 grid gap-6 lg:grid-cols-3">
-              {featuredPackages.map((item) => (
-                <PackagePreviewCard
-                  key={item.id}
-                  title={item.title}
-                  duration={item.duration}
-                  price={item.price}
-                  image={item.image}
-                  badge={item.badge}
-                  highlights={item.highlights}
-                />
-              ))}
-            </div>
-          </div>
-        </section>
+      <div className="mt-6 flex justify-center md:mt-0 md:block">
+        <a
+          href="/results"
+          className="inline-flex rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 md:absolute md:right-0 md:top-1/2 md:-translate-y-1/2"
+        >
+          View All Packages
+        </a>
+      </div>
+    </div>
+
+    <div className="mt-10 grid gap-6 lg:grid-cols-3">
+      {featuredPackages.map((item) => (
+        <PackagePreviewCard
+          key={item.id}
+          title={item.title}
+          duration={item.duration}
+          price={item.price}
+          image={item.image}
+          badge={item.badge}
+          highlights={item.highlights}
+        />
+      ))}
+    </div>
+  </div>
+</section>
 
         <section className="py-16 sm:py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -121,7 +131,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="pb-16 pt-6 sm:pb-24">
+                <section className="pb-16 pt-6 sm:pb-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="overflow-hidden rounded-[40px] border border-black/10 bg-[linear-gradient(135deg,#111827_0%,#1f2937_35%,#f97316_140%)] px-6 py-12 text-white shadow-[0_30px_120px_rgba(15,23,42,0.18)] sm:px-10 lg:px-14 lg:py-16">
               <div className="max-w-2xl">
@@ -155,6 +165,8 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+
+        <FaqSection />
       </main>
 
       <PublicFooter />
