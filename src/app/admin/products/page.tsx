@@ -5,16 +5,18 @@ import { InfoPanel } from "@/components/shared/info-panel";
 export default function AdminProductsPage() {
   return (
     <PortalShell
-      title="Products"
-      subtitle="Hotels, sightseeing, transfers, meals, margin visibility, and recommendation control."
+      title="Inventory Overview"
+      subtitle="Review hotels, sightseeing, transfers, meals, and their commercial visibility across the catalog."
       sidebar={<AdminSidebar />}
     >
-      <InfoPanel title="Product Buckets">
+      <InfoPanel title="Inventory Categories">
         <div className="grid gap-4 md:grid-cols-4">
           {["Hotels", "Sightseeing", "Transfers", "Meals"].map((item) => (
             <div key={item} className="rounded-[24px] bg-slate-50 p-5">
               <p className="font-semibold text-slate-950">{item}</p>
-              <p className="mt-2 text-sm text-slate-600">Prototype inventory table placeholder</p>
+              <p className="mt-2 text-sm text-slate-600">
+                Prototype inventory category summary
+              </p>
             </div>
           ))}
         </div>

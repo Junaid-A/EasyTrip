@@ -62,13 +62,13 @@ export function PackageResultCard({
           href="/customize"
           className="inline-flex items-center justify-center rounded-full bg-black px-5 py-3 text-sm font-semibold text-white"
         >
-          Customize
+          Continue to Customize
         </Link>
         <Link
           href="/review"
           className="inline-flex items-center justify-center rounded-full border border-black px-5 py-3 text-sm font-semibold text-black"
         >
-          Quick Review
+          Review Trip
         </Link>
       </div>
     </div>

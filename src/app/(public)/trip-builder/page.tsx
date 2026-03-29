@@ -253,14 +253,14 @@ export default function TripBuilderPage() {
 
             <aside className="space-y-6">
               <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.05)]">
-                <p className="text-sm font-medium text-sky-700">Prototype Flow</p>
+                <p className="text-sm font-medium text-sky-700">How it works</p>
                 <div className="mt-5 space-y-3">
                   {[
-                    "Fill trip intent",
-                    "View curated packages",
-                    "Customize inclusions",
-                    "Review final summary",
-                    "Confirm booking state",
+                    "Share your trip details",
+                    "Browse curated packages",
+                    "Customize your trip",
+                    "Review your trip",
+                    "Confirm your booking",
                   ].map((item, index) => (
                     <div
                       key={item}
@@ -305,14 +305,13 @@ export default function TripBuilderPage() {
 
               <div className="overflow-hidden rounded-[36px] border border-slate-200 bg-[linear-gradient(135deg,#020617_0%,#0f172a_35%,#1d4ed8_100%)] p-6 text-white shadow-[0_20px_70px_rgba(15,23,42,0.10)]">
                 <p className="text-sm font-medium text-sky-200">
-                  Suggested Positioning
+                  Suggested trip style
                 </p>
                 <h3 className="mt-3 text-2xl font-semibold tracking-tight">
                   Premium city trip with guided upgrades
                 </h3>
                 <p className="mt-4 text-sm leading-7 text-white/80">
-                  Good for customer-facing demos where you want the trip to feel
-                  modern, polished, and easy to trust.
+                  A strong match for travelers looking for a modern, comfortable, and more premium city escape.
                 </p>
               </div>
             </aside>

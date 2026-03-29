@@ -3,7 +3,7 @@ import Link from "next/link";
 const navItems = [
   { label: "Destinations", href: "/results" },
   { label: "Packages", href: "/results" },
-  { label: "Build Trip", href: "/trip-builder" },
+  { label: "Plan Your Trip", href: "/trip-builder" },
   { label: "Contact", href: "/" },
 ];
 
@@ -19,7 +19,7 @@ export function PublicHeader() {
             <p className="text-sm font-semibold tracking-[0.08em] text-slate-900">
               EASYTRIP365
             </p>
-            <p className="text-xs text-slate-500">Premium travel planning</p>
+            <p className="text-xs text-slate-500">Smart holiday planning</p>
           </div>
         </Link>
 
@@ -40,7 +40,7 @@ export function PublicHeader() {
             href="/results"
             className="hidden rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:inline-flex"
           >
-            Explore
+            Browse Packages
           </Link>
           <Link
             href="/trip-builder"

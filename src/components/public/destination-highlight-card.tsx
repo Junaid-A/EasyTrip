@@ -40,7 +40,7 @@ export function DestinationHighlightCard({
           <div>
             <h3 className="text-2xl font-semibold">{title}</h3>
             <p className="mt-2 text-sm text-white/75">
-              Curated premium stays and smoother itinerary planning
+              Explore curated stays, experiences, and trip ideas in one place
             </p>
           </div>
 

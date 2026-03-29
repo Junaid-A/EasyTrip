@@ -6,11 +6,11 @@ import { InfoPanel } from "@/components/shared/info-panel";
 export default function AgentCreatePackagePage() {
   return (
     <PortalShell
-      title="Create Package"
-      subtitle="Customer details, destination, hotel, sightseeing, transfers, meals, and notes."
+      title="Create Quote"
+      subtitle="Capture customer details, destination, hotel, sightseeing, transfers, meals, and travel notes."
       sidebar={<AgentSidebar />}
     >
-      <InfoPanel title="Package Builder">
+      <InfoPanel title="Quote Builder">
         <div className="grid gap-4 md:grid-cols-2">
           {[
             "Customer Name",
@@ -28,8 +28,11 @@ export default function AgentCreatePackagePage() {
         </div>
 
         <div className="mt-6">
-          <Link href="/agent/pricing" className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white">
-            Continue to Pricing
+          <Link
+            href="/agent/pricing"
+            className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
+          >
+            Continue to Quote Pricing
           </Link>
         </div>
       </InfoPanel>

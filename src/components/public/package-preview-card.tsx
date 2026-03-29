@@ -60,7 +60,7 @@ export function PackagePreviewCard({
 
         <div className="mt-6 border-t border-slate-200 pt-4">
           <span className="text-sm font-semibold text-slate-950">
-            Explore package
+            View package details
           </span>
         </div>
       </div>

@@ -6,13 +6,20 @@ export default function AdminRatesPage() {
   return (
     <PortalShell
       title="Rates"
-      subtitle="Customer pricing rules, agent pricing rules, markup guidance, and preferred rate cards."
+      subtitle="Control customer pricing rules, agent markups, preferred buying rates, and commercial pricing logic."
       sidebar={<AdminSidebar />}
     >
       <InfoPanel title="Rate Controls">
         <div className="space-y-4">
-          {["Customer pricing rules", "Agent markup guidance", "Preferred inventory rates"].map((item) => (
-            <div key={item} className="rounded-[24px] bg-slate-50 p-5 text-sm text-slate-700">
+          {[
+            "Customer pricing rules",
+            "Agent markup guidance",
+            "Preferred inventory rates",
+          ].map((item) => (
+            <div
+              key={item}
+              className="rounded-[24px] bg-slate-50 p-5 text-sm text-slate-700"
+            >
               {item}
             </div>
           ))}

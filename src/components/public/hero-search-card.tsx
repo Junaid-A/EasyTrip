@@ -29,7 +29,7 @@ export function HeroSearchCard() {
           href="/trip-builder"
           className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-6 py-4 text-sm font-semibold text-white transition hover:bg-slate-800"
         >
-          Build My Trip
+          Start Planning
         </Link>
       </div>
     </div>

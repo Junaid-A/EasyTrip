@@ -96,7 +96,7 @@ export default function ResultsPage() {
                       href="/customize"
                       className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                     >
-                      Continue with Selected Package
+                      Continue to Customize
                     </Link>
                   ) : null}
                 </div>
@@ -224,7 +224,7 @@ export default function ResultsPage() {
                             onClick={() => handlePackageSelect(item)}
                             className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                           >
-                            {isSelected ? "Customize Selected Package" : "Select & Customize"}
+                            {isSelected ? "Continue to Customize" : "Select Package"}
                           </button>
 
                           <button

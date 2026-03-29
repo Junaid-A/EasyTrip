@@ -1,23 +1,23 @@
 const items = [
   {
-    title: "Cleaner booking flow",
+    title: "Simpler planning flow",
     description:
-      "Reduce friction with a more guided and premium way to move from discovery to trip confirmation.",
+      "Move from discovery to final review in a way that feels guided, clear, and easy to follow.",
   },
   {
-    title: "Better package presentation",
+    title: "Curated package options",
     description:
-      "Show higher quality destination and pricing options in a way that feels curated, not cluttered.",
+      "Compare destinations, stays, and trip details without feeling overwhelmed by too many choices.",
   },
   {
-    title: "Premium visual trust",
+    title: "Clearer decisions",
     description:
-      "Sharper hierarchy, calmer spacing, and more polished sections make the product feel credible.",
+      "See the essential details faster so you can choose what fits your budget, style, and travel goals.",
   },
   {
-    title: "Demo-ready structure",
+    title: "More confident booking",
     description:
-      "A simple clickable prototype that already resembles a strong customer-facing final product.",
+      "A cleaner experience helps travelers feel more comfortable moving ahead with customization and review.",
   },
 ];
 

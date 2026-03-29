@@ -37,7 +37,7 @@ export default function ReviewPage() {
               </h1>
               <p className="mt-4 text-base leading-8 text-slate-600 sm:text-lg">
                 Check your selected room, add-ons, and final pricing before
-                submitting the booking request.
+                moving ahead to confirmation.
               </p>
             </div>
           </div>
@@ -172,10 +172,10 @@ export default function ReviewPage() {
 
               <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.05)]">
                 <p className="text-sm font-medium text-sky-700">
-                  Booking Reference
+                  Reference ID
                 </p>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  Your booking request will be recorded against reference{" "}
+                  Your trip details have been saved under reference{" "}
                   <span className="font-semibold text-slate-950">{bookingId}</span>.
                 </p>
               </div>
@@ -185,7 +185,7 @@ export default function ReviewPage() {
                   href={`/confirmation/${bookingId}`}
                   className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                 >
-                  Confirm Booking Request
+                  Confirm Booking
                 </Link>
 
                 <Link

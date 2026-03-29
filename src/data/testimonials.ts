@@ -4,20 +4,20 @@ export const testimonials = [
     name: "Aarav Mehta",
     role: "Couple Traveler",
     quote:
-      "The trip selection felt premium and easy. We went from confusion to a final package much faster than usual.",
+      "Planning our trip felt much easier than usual. We were able to compare options quickly and choose a package that suited us without the usual confusion.",
   },
   {
     id: "t2",
     name: "Riya Sharma",
     role: "Family Traveler",
     quote:
-      "The layout, package clarity, and customization flow made the whole process feel much more trustworthy.",
+      "Everything felt simple to follow, from exploring packages to reviewing the final trip details. It gave us much more confidence while planning.",
   },
   {
     id: "t3",
     name: "Kabir Anand",
     role: "Frequent International Traveler",
     quote:
-      "It feels cleaner than most travel websites. The presentation of options was polished and much easier to compare.",
+      "I liked how easy it was to understand the options and narrow them down. The overall experience felt smooth, clear, and more premium than expected.",
   },
 ];

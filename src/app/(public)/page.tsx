@@ -28,16 +28,17 @@ export default function HomePage() {
             <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_0.95fr]">
               <div className="max-w-2xl">
                 <span className="inline-flex rounded-full border border-sky-200 bg-white/80 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-700 backdrop-blur-md">
-                  Premium destination planning
+                  Smart holiday planning, made simple
                 </span>
 
                 <h1 className="mt-6 text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl lg:text-7xl">
-                  A cleaner way to plan, present, and sell travel experiences.
+                  Plan better trips without the usual back-and-forth.
                 </h1>
 
                 <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">
-                  EasyTrip365 is designed to feel calm, premium, and conversion-focused
-                  from the first click to the final trip review.
+                  Discover curated packages, personalize your stay, compare options
+                  clearly, and move from first search to final confirmation in one
+                  smooth flow.
                 </p>
 
                 <div className="mt-8 flex flex-wrap gap-4">
@@ -45,20 +46,20 @@ export default function HomePage() {
                     href="/trip-builder"
                     className="inline-flex rounded-2xl bg-slate-950 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                   >
-                    Build My Trip
+                    Start Planning My Trip
                   </Link>
                   <Link
                     href="/results"
                     className="inline-flex rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
                   >
-                    Explore Packages
+                    Browse Packages
                   </Link>
                 </div>
 
                 <div className="mt-10 flex flex-wrap gap-6 text-sm text-slate-500">
-                  <span>Premium positioning</span>
-                  <span>Clickable demo flow</span>
-                  <span>Cleaner package discovery</span>
+                  <span>Curated travel options</span>
+                  <span>Simple customization flow</span>
+                  <span>Clear pricing and review</span>
                 </div>
               </div>
 
@@ -72,18 +73,18 @@ export default function HomePage() {
                     }}
                   />
                   <div className="p-6">
-                    <p className="text-sm text-slate-500">Bangkok • Curated urban luxury</p>
+                    <p className="text-sm text-slate-500">Bangkok • City stays and memorable experiences</p>
                     <p className="mt-2 text-xl font-semibold text-slate-950">
-                      Premium stays with cleaner itinerary presentation
+                      Handpicked trips designed to feel easy from day one
                     </p>
                   </div>
                 </div>
 
                 <div className="space-y-5">
                   <div className="rounded-[36px] border border-white/70 bg-white/80 p-6 shadow-[0_28px_100px_rgba(15,23,42,0.10)] backdrop-blur-xl">
-                    <p className="text-sm text-slate-500">Designed for better conversion</p>
+                    <p className="text-sm text-slate-500">A smoother booking experience</p>
                     <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
-                      Calm layout. Stronger hierarchy. Better trust.
+                      Explore, customize, review, and confirm with confidence.
                     </p>
                   </div>
 
@@ -96,9 +97,9 @@ export default function HomePage() {
                       }}
                     />
                     <div className="p-6">
-                      <p className="text-sm text-slate-500">Modern travel-tech feel</p>
+                      <p className="text-sm text-slate-500">Built for modern travelers</p>
                       <p className="mt-2 text-lg font-semibold text-slate-950">
-                        Built to look more premium and branded
+                        A cleaner way to compare options and choose what fits you best
                       </p>
                     </div>
                   </div>
@@ -116,8 +117,8 @@ export default function HomePage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <SectionHeading
               eyebrow="Why EasyTrip365"
-              title="The structure is now cleaner. The final polish comes next."
-              description="This homepage resets the visual direction into a lighter, more premium, and more deliberate travel-tech language."
+              title="Everything you need to plan with more clarity and less friction."
+              description="From package discovery to trip review, every step is designed to help travelers compare faster, decide better, and book with more confidence."
             />
 
             <div className="mt-10">
@@ -130,8 +131,8 @@ export default function HomePage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <SectionHeading
               eyebrow="Featured Destinations"
-              title="Destination cards that feel elevated instead of template-like."
-              description="Larger visual cards, calmer overlays, and stronger hierarchy make the first impression feel premium."
+              title="Explore destinations that match your travel style."
+              description="Browse standout locations, compare trip ideas, and start with options that already feel curated instead of overwhelming."
             />
 
             <div className="mt-10 grid gap-6 lg:grid-cols-2">
@@ -154,8 +155,8 @@ export default function HomePage() {
             <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
               <SectionHeading
                 eyebrow="Curated Packages"
-                title="Packages that look easy to compare and easy to trust."
-                description="The layout should guide customers visually before it tries to sell them anything."
+                title="Packages that are easy to compare and easier to trust."
+                description="See the essentials at a glance, understand what is included, and move into customization without confusion."
               />
               <Link
                 href="/results"
@@ -184,9 +185,9 @@ export default function HomePage() {
         <section className="py-16 sm:py-20 lg:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <SectionHeading
-              eyebrow="Trust"
-              title="Cleaner testimonials. Less clutter. More credibility."
-              description="Use social proof in a restrained way so the page still feels premium."
+              eyebrow="Traveler Feedback"
+              title="Trusted by travelers who want a smoother planning experience."
+              description="Real feedback helps build confidence. Keep the proof visible, but clean and unobtrusive."
               align="center"
             />
 
@@ -208,14 +209,15 @@ export default function HomePage() {
             <div className="overflow-hidden rounded-[40px] border border-slate-200 bg-[linear-gradient(135deg,#020617_0%,#0f172a_35%,#1d4ed8_100%)] px-6 py-12 text-white shadow-[0_30px_120px_rgba(15,23,42,0.18)] sm:px-10 lg:px-14 lg:py-16">
               <div className="max-w-2xl">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-200">
-                  Next step
+                  Start your journey
                 </p>
                 <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-                  The route flow works. Now the rest of the site needs this same polish.
+                  Ready to build a trip that feels more personalized from the start?
                 </h2>
                 <p className="mt-4 text-base leading-8 text-white/78">
-                  After this homepage, the same visual system should be applied to
-                  Trip Builder, Results, Customize, Review, and Confirmation.
+                  Begin with the trip builder, explore curated options, and move to
+                  review and confirmation with a flow that feels simple, clear, and
+                  premium throughout.
                 </p>
 
                 <div className="mt-8 flex flex-wrap gap-4">
@@ -223,13 +225,13 @@ export default function HomePage() {
                     href="/trip-builder"
                     className="inline-flex rounded-2xl bg-white px-6 py-3.5 text-sm font-semibold text-slate-950 transition hover:bg-slate-100"
                   >
-                    Continue to Trip Builder
+                    Start Planning
                   </Link>
                   <Link
                     href="/results"
                     className="inline-flex rounded-2xl border border-white/20 bg-white/10 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-white/15"
                   >
-                    Explore Results
+                    Browse Packages
                   </Link>
                 </div>
               </div>

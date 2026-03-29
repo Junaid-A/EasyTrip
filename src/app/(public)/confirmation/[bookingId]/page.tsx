@@ -130,14 +130,14 @@ export default function ConfirmationPage() {
               href="/"
               className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
-              Go to Home
+              Back to Home
             </Link>
 
             <Link
               href="/trip-builder"
               className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
             >
-              Build Another Trip
+              Start Another Trip
             </Link>
           </div>
         </div>
