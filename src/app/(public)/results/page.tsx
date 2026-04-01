@@ -4,65 +4,89 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PublicHeader } from "@/components/public/public-header";
 import { PublicFooter } from "@/components/public/public-footer";
+import { readyPackages } from "@/lib/mock/bangkok-builder-data";
+import { getRecommendedPackages } from "@/lib/helpers/recommendation";
 import { useTripBuilderStore } from "@/store/useTripBuilderStore";
-
-const packages = [
-  {
-    id: "pkg-1",
-    title: "Bangkok Signature Escape",
-    badge: "Most Booked",
-    duration: "4 Nights / 5 Days",
-    hotel: "4★ Premium Stay",
-    transfers: "Airport + city transfers",
-    price: "₹28,900",
-    description:
-      "A balanced Bangkok trip with comfortable stays, city connectivity, and popular inclusions for first-time travelers.",
-    tags: ["Popular choice", "Comfort stay", "Smooth itinerary"],
-  },
-  {
-    id: "pkg-2",
-    title: "Bangkok Luxury Discovery",
-    badge: "Recommended",
-    duration: "5 Nights / 6 Days",
-    hotel: "5★ Luxury Stay",
-    transfers: "Private transfers",
-    price: "₹39,500",
-    description:
-      "A more premium option for travelers who want better hotels, added comfort, and a more private overall experience.",
-    tags: ["Premium stay", "Private transfers", "Higher comfort"],
-  },
-  {
-    id: "pkg-3",
-    title: "Bangkok Smart Value Plus",
-    badge: "Best Value",
-    duration: "4 Nights / 5 Days",
-    hotel: "4★ Central Stay",
-    transfers: "Shared + optional private",
-    price: "₹25,400",
-    description:
-      "A value-focused package with a central stay, practical inclusions, and flexibility for upgrades during customization.",
-    tags: ["Value option", "Central location", "Upgrade friendly"],
-  },
-];
 
 export default function ResultsPage() {
   const router = useRouter();
 
   const destination = useTripBuilderStore((state) => state.destination);
-  const travelDates = useTripBuilderStore((state) => state.travelDates);
+  const segments = useTripBuilderStore((state) => state.segments);
   const adults = useTripBuilderStore((state) => state.adults);
+  const children = useTripBuilderStore((state) => state.children);
+  const budget = useTripBuilderStore((state) => state.budget);
   const travelStyle = useTripBuilderStore((state) => state.travelStyle);
   const selectedPackageId = useTripBuilderStore((state) => state.selectedPackageId);
   const selectPackage = useTripBuilderStore((state) => state.selectPackage);
 
-  const handlePackageSelect = (item: (typeof packages)[number]) => {
+  const tripLabel = segments
+    .map((segment) => segment.city)
+    .filter(Boolean)
+    .join(" → ");
+
+  const recommendedPackages = getRecommendedPackages(
+    readyPackages.map((item, index) => ({
+      id: item.id,
+      title: item.title,
+      basePrice: item.price,
+      popularityScore: index === 0 ? 10 : 7 - index,
+      marginScore: item.hotelCategory === "4 Star" ? 8 : 7,
+      budgetFitScore:
+        budget === "Luxury"
+          ? item.price >= 40000
+            ? 9
+            : 5
+          : budget === "Premium"
+          ? item.price >= 30000 && item.price < 50000
+            ? 9
+            : 6
+          : budget === "Economy"
+          ? item.price < 32000
+            ? 9
+            : 5
+          : 8,
+      tripMoodFitScore:
+        travelStyle === "Mixed"
+          ? 8
+          : item.title.toLowerCase().includes(travelStyle.toLowerCase().split(" ")[0])
+          ? 9
+          : 6,
+      recommendedLabel: item.tag,
+    }))
+      .map((scored) => {
+        const original = readyPackages.find((pkg) => pkg.id === scored.id)!;
+        return {
+          ...original,
+          score: scored,
+        };
+      })
+      .sort((a, b) => {
+        const aScore =
+          (a.score.popularityScore || 0) +
+          (a.score.marginScore || 0) +
+          (a.score.budgetFitScore || 0) +
+          (a.score.tripMoodFitScore || 0);
+        const bScore =
+          (b.score.popularityScore || 0) +
+          (b.score.marginScore || 0) +
+          (b.score.budgetFitScore || 0) +
+          (b.score.tripMoodFitScore || 0);
+
+        return bScore - aScore;
+      })
+      .map((item) => item)
+  );
+
+  function handlePackageSelect(item: (typeof readyPackages)[number]) {
     selectPackage({
       selectedPackageId: item.id,
       selectedPackageTitle: item.title,
-      selectedPackagePrice: Number(item.price.replace(/[^\d]/g, "")),
+      selectedPackagePrice: item.price,
     });
+
     router.push("/customize");
-  };
+  }
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#f8fafc_35%,#ffffff_100%)]">
@@ -79,7 +103,8 @@ export default function ResultsPage() {
                     Curated options for your {destination} trip
                   </h1>
                   <p className="mt-3 text-sm text-slate-600">
-                    {travelDates} • {adults} Adults • {travelStyle}
+                    {tripLabel || destination} • {adults} Adults
+                    {children ? `, ${children} Children` : ""} • {travelStyle}
                   </p>
                 </div>
 
@@ -104,9 +129,9 @@ export default function ResultsPage() {
 
               <div className="mt-6 flex flex-wrap gap-3">
                 {[
-                  "Shortlisted for your travel style",
-                  "Easy to compare",
-                  "Flexible upgrades available",
+                  `Budget: ${budget}`,
+                  "Package-led recommendations",
+                  "Custom edits available next",
                 ].map((item) => (
                   <span
                     key={item}
@@ -127,10 +152,10 @@ export default function ResultsPage() {
                 <h2 className="text-lg font-semibold text-slate-950">Trip Filters</h2>
                 <div className="mt-5 space-y-4 text-sm">
                   {[
-                    "Budget: Premium",
-                    "Hotel: 4★ and 5★ options",
-                    "Transfers: Comfort-focused",
+                    `Budget: ${budget}`,
                     `Style: ${travelStyle}`,
+                    `Travellers: ${adults + children}`,
+                    tripLabel ? `Route: ${tripLabel}` : "Route: Bangkok",
                   ].map((item) => (
                     <div
                       key={item}
@@ -145,14 +170,14 @@ export default function ResultsPage() {
               <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.05)]">
                 <p className="text-sm font-medium text-sky-700">Planning Note</p>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  Select a package to continue. You’ll be able to customize room
-                  preference and add-ons in the next step.
+                  Select a package to continue. In the next step you can refine room preference,
+                  extras, and trip-level choices before review.
                 </p>
               </div>
             </aside>
 
             <section className="space-y-6">
-              {packages.map((item) => {
+              {recommendedPackages.map((item) => {
                 const isSelected = selectedPackageId === item.id;
 
                 return (
@@ -166,7 +191,7 @@ export default function ResultsPage() {
                       <div className="p-6 sm:p-8">
                         <div className="flex flex-wrap items-center gap-3">
                           <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
-                            {item.badge}
+                            {item.tag}
                           </span>
                           {isSelected ? (
                             <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
@@ -181,22 +206,18 @@ export default function ResultsPage() {
 
                         <div className="mt-5 grid gap-3 sm:grid-cols-3">
                           <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                            {item.duration}
+                            {item.nights} Nights
                           </div>
                           <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                            {item.hotel}
+                            {item.hotelCategory}
                           </div>
                           <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                            {item.transfers}
+                            {item.area}
                           </div>
                         </div>
 
-                        <p className="mt-5 text-sm leading-7 text-slate-600">
-                          {item.description}
-                        </p>
-
                         <div className="mt-6 flex flex-wrap gap-3">
-                          {item.tags.map((tag) => (
+                          {item.includes.map((tag) => (
                             <span
                               key={tag}
                               className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
@@ -212,10 +233,10 @@ export default function ResultsPage() {
                           Starting at
                         </p>
                         <p className="mt-3 text-4xl font-semibold tracking-tight text-slate-950">
-                          {item.price}
+                          ₹{item.price.toLocaleString("en-IN")}
                         </p>
                         <p className="mt-2 text-sm text-slate-500">
-                          Per package before add-ons and service charges
+                          Package estimate before later custom refinements
                         </p>
 
                         <div className="mt-6 space-y-3">
@@ -233,14 +254,12 @@ export default function ResultsPage() {
                               selectPackage({
                                 selectedPackageId: item.id,
                                 selectedPackageTitle: item.title,
-                                selectedPackagePrice: Number(
-                                  item.price.replace(/[^\d]/g, "")
-                                ),
+                                selectedPackagePrice: item.price,
                               })
                             }
                             className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
                           >
-                            {isSelected ? "Package Selected" : "Select This Package"}
+                            {isSelected ? "Package Selected" : "Save Selection"}
                           </button>
                         </div>
                       </div>

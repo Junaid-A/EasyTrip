@@ -8,21 +8,28 @@ import { useTripBuilderStore } from "@/store/useTripBuilderStore";
 
 export default function ConfirmationPage() {
   const params = useParams();
-  const bookingId = String(params.bookingId ?? "");
+  const bookingIdFromRoute = String(params.bookingId ?? "");
 
-  const selectedPackageTitle = useTripBuilderStore(
-    (state) => state.selectedPackageTitle
-  );
-  const selectedPackagePrice = useTripBuilderStore(
-    (state) => state.selectedPackagePrice
-  );
+  const selectedPackageTitle = useTripBuilderStore((state) => state.selectedPackageTitle);
+  const selectedPackagePrice = useTripBuilderStore((state) => state.selectedPackagePrice);
   const adults = useTripBuilderStore((state) => state.adults);
+  const children = useTripBuilderStore((state) => state.children);
   const roomPreference = useTripBuilderStore((state) => state.roomPreference);
   const serviceFee = useTripBuilderStore((state) => state.serviceFee);
-  const selectedAddOns = useTripBuilderStore((state) => state.selectedAddOns);
+  const bookingIdFromStore = useTripBuilderStore((state) => state.bookingId);
+  const selectedExtras = useTripBuilderStore((state) => state.selectedExtras);
+  const estimatedHotelTotal = useTripBuilderStore((state) => state.estimatedHotelTotal);
+  const estimatedTransferTotal = useTripBuilderStore((state) => state.estimatedTransferTotal);
+  const estimatedSightseeingTotal = useTripBuilderStore((state) => state.estimatedSightseeingTotal);
+  const estimatedMealsTotal = useTripBuilderStore((state) => state.estimatedMealsTotal);
+  const estimatedGrandTotal = useTripBuilderStore((state) => state.estimatedGrandTotal);
 
-  const addOnsTotal = selectedAddOns.length * 3250;
-  const finalPrice = selectedPackagePrice + addOnsTotal + serviceFee;
+  const bookingId = bookingIdFromRoute || bookingIdFromStore;
+  const fallbackExtrasTotal = selectedExtras.length * 900;
+  const finalPrice =
+    estimatedGrandTotal > 0
+      ? estimatedGrandTotal
+      : selectedPackagePrice + fallbackExtrasTotal + serviceFee;
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#f8fafc_35%,#ffffff_100%)]">
@@ -43,43 +50,30 @@ export default function ConfirmationPage() {
           </h1>
 
           <p className="mx-auto mt-4 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
-            We’ve saved your selected trip details, preferences, and pricing
-            under the booking reference below.
+            We’ve saved your selected trip details, preferences, and current pricing
+            estimate under the booking reference below.
           </p>
 
           <div className="mx-auto mt-10 max-w-3xl rounded-[32px] bg-slate-50 p-6 text-left sm:p-8">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
-                <p className="text-sm text-slate-500">Booking ID</p>
-                <p className="mt-2 font-semibold text-slate-950">{bookingId}</p>
-              </div>
+              <InfoCard label="Booking ID" value={bookingId || "Pending"} />
+              <InfoCard label="Trip" value={selectedPackageTitle || "Selected trip"} />
 
-              <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
-                <p className="text-sm text-slate-500">Trip</p>
-                <p className="mt-2 font-semibold text-slate-950">
-                  {selectedPackageTitle}
-                </p>
-              </div>
+              <InfoCard
+                label="Travelers"
+                value={`${adults} Adults${children ? `, ${children} Children` : ""}`}
+              />
 
-              <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
-                <p className="text-sm text-slate-500">Travelers</p>
-                <p className="mt-2 font-semibold text-slate-950">
-                  {adults} Adults
-                </p>
-              </div>
-
-              <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
-                <p className="text-sm text-slate-500">Room Preference</p>
-                <p className="mt-2 font-semibold text-slate-950">
-                  {roomPreference}
-                </p>
-              </div>
+              <InfoCard
+                label="Room Preference"
+                value={roomPreference || "Standard preference"}
+              />
 
               <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200 sm:col-span-2">
-                <p className="text-sm text-slate-500">Selected Add-ons</p>
+                <p className="text-sm text-slate-500">Selected Extras</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {selectedAddOns.length > 0 ? (
-                    selectedAddOns.map((item) => (
+                  {selectedExtras.length > 0 ? (
+                    selectedExtras.map((item) => (
                       <span
                         key={item}
                         className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
@@ -88,38 +82,49 @@ export default function ConfirmationPage() {
                       </span>
                     ))
                   ) : (
-                    <p className="font-semibold text-slate-950">
-                      No add-ons selected
-                    </p>
+                    <p className="font-semibold text-slate-950">No extras selected</p>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
-                <p className="text-sm text-slate-500">Package Base</p>
-                <p className="mt-2 font-semibold text-slate-950">
-                  ₹{selectedPackagePrice.toLocaleString("en-IN")}
-                </p>
-              </div>
+              <InfoCard
+                label="Package Base"
+                value={`₹${selectedPackagePrice.toLocaleString("en-IN")}`}
+              />
 
-              <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
-                <p className="text-sm text-slate-500">Add-ons Total</p>
-                <p className="mt-2 font-semibold text-slate-950">
-                  ₹{addOnsTotal.toLocaleString("en-IN")}
-                </p>
-              </div>
+              <InfoCard
+                label="Hotel Estimate"
+                value={`₹${estimatedHotelTotal.toLocaleString("en-IN")}`}
+              />
 
-              <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
-                <p className="text-sm text-slate-500">Service Charges</p>
-                <p className="mt-2 font-semibold text-slate-950">
-                  ₹{serviceFee.toLocaleString("en-IN")}
-                </p>
-              </div>
+              <InfoCard
+                label="Transfer Estimate"
+                value={`₹${estimatedTransferTotal.toLocaleString("en-IN")}`}
+              />
 
-              <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
+              <InfoCard
+                label="Sightseeing Estimate"
+                value={`₹${estimatedSightseeingTotal.toLocaleString("en-IN")}`}
+              />
+
+              <InfoCard
+                label="Meals / Extras Estimate"
+                value={`₹${Math.max(estimatedMealsTotal, fallbackExtrasTotal).toLocaleString("en-IN")}`}
+              />
+
+              <InfoCard
+                label="Service Charges"
+                value={`₹${serviceFee.toLocaleString("en-IN")}`}
+              />
+
+              <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200 sm:col-span-2">
                 <p className="text-sm text-slate-500">Final Price</p>
-                <p className="mt-2 font-semibold text-slate-950">
+                <p className="mt-2 text-xl font-semibold text-slate-950">
                   ₹{finalPrice.toLocaleString("en-IN")}
+                </p>
+                <p className="mt-2 text-sm text-slate-500">
+                  This reflects the current centralized trip estimate carried forward from your
+                  builder, customize, and review flow.
                 </p>
               </div>
             </div>
@@ -144,6 +149,15 @@ export default function ConfirmationPage() {
       </main>
 
       <PublicFooter />
+    </div>
+  );
+}
+
+function InfoCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="mt-2 font-semibold text-slate-950">{value}</p>
     </div>
   );
 }

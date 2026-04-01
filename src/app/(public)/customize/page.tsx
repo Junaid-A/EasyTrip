@@ -5,34 +5,35 @@ import { PublicHeader } from "@/components/public/public-header";
 import { PublicFooter } from "@/components/public/public-footer";
 import { useTripBuilderStore } from "@/store/useTripBuilderStore";
 
-const addOns = [
-  "Private airport pickup",
-  "Safari World",
-  "Dinner cruise",
-  "Floating market tour",
-  "Indian dinner package",
-  "Luxury room upgrade",
+const extraOptions = [
+  "Breakfast included",
+  "Indian meal support",
+  "SIM card",
+  "Travel insurance",
+  "Early check-in",
+  "Late check-out",
 ];
 
 const roomOptions = ["Deluxe Room", "Suite", "Pool View"];
 
 export default function CustomizePage() {
-  const selectedPackageTitle = useTripBuilderStore(
-    (state) => state.selectedPackageTitle
-  );
-  const selectedPackagePrice = useTripBuilderStore(
-    (state) => state.selectedPackagePrice
-  );
-  const selectedAddOns = useTripBuilderStore((state) => state.selectedAddOns);
+  const selectedPackageTitle = useTripBuilderStore((state) => state.selectedPackageTitle);
+  const selectedPackagePrice = useTripBuilderStore((state) => state.selectedPackagePrice);
+  const selectedExtras = useTripBuilderStore((state) => state.selectedExtras);
   const roomPreference = useTripBuilderStore((state) => state.roomPreference);
   const serviceFee = useTripBuilderStore((state) => state.serviceFee);
-  const toggleAddOn = useTripBuilderStore((state) => state.toggleAddOn);
-  const setRoomPreference = useTripBuilderStore(
-    (state) => state.setRoomPreference
-  );
+  const estimatedGrandTotal = useTripBuilderStore((state) => state.estimatedGrandTotal);
+  const estimatedTransferTotal = useTripBuilderStore((state) => state.estimatedTransferTotal);
+  const estimatedSightseeingTotal = useTripBuilderStore((state) => state.estimatedSightseeingTotal);
+  const estimatedMealsTotal = useTripBuilderStore((state) => state.estimatedMealsTotal);
+  const toggleExtra = useTripBuilderStore((state) => state.toggleExtra);
+  const setRoomPreference = useTripBuilderStore((state) => state.setRoomPreference);
 
-  const addOnsTotal = selectedAddOns.length * 3250;
-  const total = selectedPackagePrice + addOnsTotal + serviceFee;
+  const fallbackExtrasTotal = selectedExtras.length * 900;
+  const total =
+    estimatedGrandTotal > 0
+      ? estimatedGrandTotal
+      : selectedPackagePrice + fallbackExtrasTotal + serviceFee;
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#f8fafc_35%,#ffffff_100%)]">
@@ -46,11 +47,10 @@ export default function CustomizePage() {
                 Customize
               </span>
               <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-                Personalize your trip with room upgrades and add-ons.
+                Personalize your trip before review.
               </h1>
               <p className="mt-4 text-base leading-8 text-slate-600 sm:text-lg">
-                Choose the extras you want and review the updated trip price
-                before moving ahead.
+                Fine-tune room preference and useful extras, then continue to your final review.
               </p>
             </div>
           </div>
@@ -61,24 +61,24 @@ export default function CustomizePage() {
             <section className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.06)] sm:p-8">
               <div>
                 <h2 className="text-2xl font-semibold text-slate-950">
-                  {selectedPackageTitle}
+                  {selectedPackageTitle || "Selected trip package"}
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
-                  Selected trip package
+                  Package and trip-level refinements
                 </p>
               </div>
 
               <div className="mt-8">
-                <h3 className="text-base font-semibold text-slate-950">Add-ons</h3>
+                <h3 className="text-base font-semibold text-slate-950">Useful extras</h3>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {addOns.map((item) => {
-                    const isActive = selectedAddOns.includes(item);
+                  {extraOptions.map((item) => {
+                    const isActive = selectedExtras.includes(item);
 
                     return (
                       <button
                         key={item}
                         type="button"
-                        onClick={() => toggleAddOn(item)}
+                        onClick={() => toggleExtra(item)}
                         className={`rounded-[24px] border px-4 py-4 text-left text-sm font-medium transition ${
                           isActive
                             ? "border-sky-200 bg-sky-50 text-sky-700"
@@ -93,9 +93,7 @@ export default function CustomizePage() {
               </div>
 
               <div className="mt-8">
-                <h3 className="text-base font-semibold text-slate-950">
-                  Room Preference
-                </h3>
+                <h3 className="text-base font-semibold text-slate-950">Room Preference</h3>
                 <div className="mt-4 flex flex-wrap gap-3">
                   {roomOptions.map((item) => (
                     <button
@@ -115,11 +113,9 @@ export default function CustomizePage() {
               </div>
 
               <div className="mt-8">
-                <h3 className="text-base font-semibold text-slate-950">
-                  Special Requests
-                </h3>
+                <h3 className="text-base font-semibold text-slate-950">Special Requests</h3>
                 <textarea
-                  placeholder="Add any preferences for room setup, meals, or airport assistance."
+                  placeholder="Add any preferences for room setup, meals, airport help, or comfort needs."
                   rows={5}
                   className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 text-sm text-slate-950 outline-none transition focus:border-sky-400 focus:bg-white"
                 />
@@ -128,9 +124,8 @@ export default function CustomizePage() {
 
             <aside className="space-y-6">
               <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.05)]">
-                <h2 className="text-lg font-semibold text-slate-950">
-                  Trip Price Summary
-                </h2>
+                <h2 className="text-lg font-semibold text-slate-950">Trip Price Summary</h2>
+
                 <div className="mt-5 space-y-4 text-sm">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Base package</span>
@@ -138,26 +133,37 @@ export default function CustomizePage() {
                       ₹{selectedPackagePrice.toLocaleString("en-IN")}
                     </span>
                   </div>
+
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Selected add-ons</span>
+                    <span className="text-slate-500">Transfers estimate</span>
                     <span className="font-medium text-slate-950">
-                      {selectedAddOns.length}
+                      ₹{estimatedTransferTotal.toLocaleString("en-IN")}
                     </span>
                   </div>
+
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Add-ons total</span>
+                    <span className="text-slate-500">Sightseeing estimate</span>
                     <span className="font-medium text-slate-950">
-                      ₹{addOnsTotal.toLocaleString("en-IN")}
+                      ₹{estimatedSightseeingTotal.toLocaleString("en-IN")}
                     </span>
                   </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Meals / extras estimate</span>
+                    <span className="font-medium text-slate-950">
+                      ₹{Math.max(estimatedMealsTotal, fallbackExtrasTotal).toLocaleString("en-IN")}
+                    </span>
+                  </div>
+
                   <div className="flex justify-between">
                     <span className="text-slate-500">Service charges</span>
                     <span className="font-medium text-slate-950">
                       ₹{serviceFee.toLocaleString("en-IN")}
                     </span>
                   </div>
+
                   <div className="flex justify-between border-t border-slate-200 pt-4">
-                    <span className="text-slate-700">Total trip price</span>
+                    <span className="text-slate-700">Current total</span>
                     <span className="text-lg font-semibold text-slate-950">
                       ₹{total.toLocaleString("en-IN")}
                     </span>
@@ -166,12 +172,10 @@ export default function CustomizePage() {
               </div>
 
               <div className="rounded-[36px] border border-slate-200 bg-[linear-gradient(135deg,#020617_0%,#0f172a_35%,#1d4ed8_100%)] p-6 text-white shadow-[0_20px_70px_rgba(15,23,42,0.10)]">
-                <p className="text-sm font-medium text-sky-200">
-                  Good to know
-                </p>
+                <p className="text-sm font-medium text-sky-200">Good to know</p>
                 <p className="mt-3 text-sm leading-7 text-white/80">
-                  Add-ons can help tailor the trip around comfort, convenience,
-                  and sightseeing preferences.
+                  This page is now aligned to the trip engine totals, so changes made in builder mode
+                  and extra selection are reflected more consistently.
                 </p>
               </div>
 

@@ -6,20 +6,25 @@ import { PublicFooter } from "@/components/public/public-footer";
 import { useTripBuilderStore } from "@/store/useTripBuilderStore";
 
 export default function ReviewPage() {
-  const selectedPackageTitle = useTripBuilderStore(
-    (state) => state.selectedPackageTitle
-  );
-  const selectedPackagePrice = useTripBuilderStore(
-    (state) => state.selectedPackagePrice
-  );
+  const selectedPackageTitle = useTripBuilderStore((state) => state.selectedPackageTitle);
+  const selectedPackagePrice = useTripBuilderStore((state) => state.selectedPackagePrice);
   const adults = useTripBuilderStore((state) => state.adults);
+  const children = useTripBuilderStore((state) => state.children);
   const roomPreference = useTripBuilderStore((state) => state.roomPreference);
   const serviceFee = useTripBuilderStore((state) => state.serviceFee);
   const bookingId = useTripBuilderStore((state) => state.bookingId);
-  const selectedAddOns = useTripBuilderStore((state) => state.selectedAddOns);
+  const selectedExtras = useTripBuilderStore((state) => state.selectedExtras);
+  const estimatedHotelTotal = useTripBuilderStore((state) => state.estimatedHotelTotal);
+  const estimatedTransferTotal = useTripBuilderStore((state) => state.estimatedTransferTotal);
+  const estimatedSightseeingTotal = useTripBuilderStore((state) => state.estimatedSightseeingTotal);
+  const estimatedMealsTotal = useTripBuilderStore((state) => state.estimatedMealsTotal);
+  const estimatedGrandTotal = useTripBuilderStore((state) => state.estimatedGrandTotal);
 
-  const addOnsTotal = selectedAddOns.length * 3250;
-  const finalPrice = selectedPackagePrice + addOnsTotal + serviceFee;
+  const fallbackExtrasTotal = selectedExtras.length * 900;
+  const finalPrice =
+    estimatedGrandTotal > 0
+      ? estimatedGrandTotal
+      : selectedPackagePrice + fallbackExtrasTotal + serviceFee;
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#f8fafc_35%,#ffffff_100%)]">
@@ -36,8 +41,7 @@ export default function ReviewPage() {
                 Review your trip before confirming.
               </h1>
               <p className="mt-4 text-base leading-8 text-slate-600 sm:text-lg">
-                Check your selected room, add-ons, and final pricing before
-                moving ahead to confirmation.
+                Check your selected trip details, useful extras, and current final estimate before confirmation.
               </p>
             </div>
           </div>
@@ -48,10 +52,10 @@ export default function ReviewPage() {
             <section className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.06)] sm:p-8">
               <div>
                 <h2 className="text-2xl font-semibold text-slate-950">
-                  {selectedPackageTitle}
+                  {selectedPackageTitle || "Selected trip"}
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
-                  {adults} Adults • {roomPreference} • Selected trip summary
+                  {adults} Adults{children ? `, ${children} Children` : ""} • {roomPreference} • Review summary
                 </p>
               </div>
 
@@ -59,40 +63,34 @@ export default function ReviewPage() {
                 <div className="rounded-[24px] bg-slate-50 p-5">
                   <p className="text-sm font-medium text-slate-500">Stay</p>
                   <p className="mt-2 font-semibold text-slate-950">
-                    Hotel stay included in selected package
+                    ₹{estimatedHotelTotal.toLocaleString("en-IN")} hotel estimate
                   </p>
                 </div>
 
                 <div className="rounded-[24px] bg-slate-50 p-5">
                   <p className="text-sm font-medium text-slate-500">Transfers</p>
                   <p className="mt-2 font-semibold text-slate-950">
-                    Airport and local transfer arrangements as per package
+                    ₹{estimatedTransferTotal.toLocaleString("en-IN")} movement estimate
                   </p>
                 </div>
 
                 <div className="rounded-[24px] bg-slate-50 p-5">
-                  <p className="text-sm font-medium text-slate-500">
-                    Room Preference
-                  </p>
-                  <p className="mt-2 font-semibold text-slate-950">
-                    {roomPreference}
-                  </p>
+                  <p className="text-sm font-medium text-slate-500">Room Preference</p>
+                  <p className="mt-2 font-semibold text-slate-950">{roomPreference}</p>
                 </div>
 
                 <div className="rounded-[24px] bg-slate-50 p-5">
                   <p className="text-sm font-medium text-slate-500">Travelers</p>
                   <p className="mt-2 font-semibold text-slate-950">
-                    {adults} Adults
+                    {adults} Adults{children ? `, ${children} Children` : ""}
                   </p>
                 </div>
 
                 <div className="rounded-[24px] bg-slate-50 p-5 sm:col-span-2">
-                  <p className="text-sm font-medium text-slate-500">
-                    Selected Add-ons
-                  </p>
+                  <p className="text-sm font-medium text-slate-500">Selected Extras</p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {selectedAddOns.length > 0 ? (
-                      selectedAddOns.map((item) => (
+                    {selectedExtras.length > 0 ? (
+                      selectedExtras.map((item) => (
                         <span
                           key={item}
                           className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200"
@@ -102,36 +100,33 @@ export default function ReviewPage() {
                       ))
                     ) : (
                       <p className="text-sm font-medium text-slate-950">
-                        No add-ons selected
+                        No extras selected
                       </p>
                     )}
                   </div>
                 </div>
 
                 <div className="rounded-[24px] bg-slate-50 p-5 sm:col-span-2">
-                  <p className="text-sm font-medium text-slate-500">Meals</p>
+                  <p className="text-sm font-medium text-slate-500">Experiences & meals</p>
                   <p className="mt-2 font-semibold text-slate-950">
-                    Meal inclusions will follow the selected package and add-ons
+                    ₹{estimatedSightseeingTotal.toLocaleString("en-IN")} sightseeing • ₹
+                    {Math.max(estimatedMealsTotal, fallbackExtrasTotal).toLocaleString("en-IN")} meals/extras
                   </p>
                 </div>
               </div>
 
               <div className="mt-8 rounded-[28px] border border-slate-200 p-5">
-                <h3 className="text-base font-semibold text-slate-950">
-                  Booking Summary
-                </h3>
+                <h3 className="text-base font-semibold text-slate-950">Booking Summary</h3>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  This trip has been tailored around your selected room type,
-                  travel preferences, and optional experiences.
+                  This review is now tied to your central trip engine totals, so selections made in
+                  earlier steps carry through more consistently into confirmation.
                 </p>
               </div>
             </section>
 
             <aside className="space-y-6">
               <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.05)]">
-                <h2 className="text-lg font-semibold text-slate-950">
-                  Price Summary
-                </h2>
+                <h2 className="text-lg font-semibold text-slate-950">Price Summary</h2>
                 <div className="mt-5 space-y-4 text-sm">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Package base</span>
@@ -141,16 +136,30 @@ export default function ReviewPage() {
                   </div>
 
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Selected add-ons</span>
+                    <span className="text-slate-500">Hotel estimate</span>
                     <span className="font-medium text-slate-950">
-                      {selectedAddOns.length}
+                      ₹{estimatedHotelTotal.toLocaleString("en-IN")}
                     </span>
                   </div>
 
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Add-ons total</span>
+                    <span className="text-slate-500">Transfer estimate</span>
                     <span className="font-medium text-slate-950">
-                      ₹{addOnsTotal.toLocaleString("en-IN")}
+                      ₹{estimatedTransferTotal.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Sightseeing estimate</span>
+                    <span className="font-medium text-slate-950">
+                      ₹{estimatedSightseeingTotal.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Meals / extras estimate</span>
+                    <span className="font-medium text-slate-950">
+                      ₹{Math.max(estimatedMealsTotal, fallbackExtrasTotal).toLocaleString("en-IN")}
                     </span>
                   </div>
 
@@ -171,9 +180,7 @@ export default function ReviewPage() {
               </div>
 
               <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.05)]">
-                <p className="text-sm font-medium text-sky-700">
-                  Reference ID
-                </p>
+                <p className="text-sm font-medium text-sky-700">Reference ID</p>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
                   Your trip details have been saved under reference{" "}
                   <span className="font-semibold text-slate-950">{bookingId}</span>.
