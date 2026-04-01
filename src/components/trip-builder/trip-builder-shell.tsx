@@ -537,15 +537,28 @@ export function TripBuilderShell() {
                   </div>
 
                   <div className="mt-6 grid min-w-0 gap-5 lg:grid-cols-2">
-                    {packageCards.map((pkg) => (
+                    {packageCards.map((pkg) => {
+  const isSelected = selectedPackageId === pkg.id;
+
+  return (
                       <article
   key={pkg.id}
-  className="min-w-0 max-w-full overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_14px_42px_rgba(15,23,42,0.05)]"
+  className={`min-w-0 max-w-full overflow-hidden rounded-[30px] border transition ${
+    isSelected
+      ? "border-orange-200 bg-orange-50/40 shadow-[0_18px_46px_rgba(249,115,22,0.14)]"
+      : "border-slate-200 bg-white shadow-[0_14px_42px_rgba(15,23,42,0.05)]"
+  }`}
 >
                         <div className={`relative h-44 sm:h-52 bg-gradient-to-br ${pkg.accentFrom} ${pkg.accentTo}`}>
                           <div className="absolute left-4 top-4 rounded-full bg-white/92 px-3 py-1 text-xs font-semibold text-slate-900">
                             {pkg.badge}
                           </div>
+
+                          {isSelected ? (
+  <div className="absolute right-4 top-4 rounded-full bg-orange-500 px-3 py-1 text-xs font-semibold text-white shadow-[0_10px_24px_rgba(249,115,22,0.22)]">
+    Selected
+  </div>
+) : null}
 
                           <div className="absolute bottom-4 left-4 right-4 min-w-0 rounded-[20px] bg-white/92 p-4 backdrop-blur">
                             <p className="break-words text-base font-semibold text-slate-950 sm:text-lg">
@@ -619,24 +632,33 @@ export function TripBuilderShell() {
                               View itinerary
                             </button>
                             <button
-                              type="button"
-                              onClick={() => handleSelectPackage(pkg.id)}
-                              className="rounded-full bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                            >
-                              Choose package
-                            </button>
+  type="button"
+  onClick={() => handleSelectPackage(pkg.id)}
+  className={`rounded-full px-4 py-3 text-sm font-semibold transition ${
+    isSelected
+      ? "bg-orange-500 text-white shadow-[0_12px_28px_rgba(249,115,22,0.24)] hover:bg-orange-600"
+      : "bg-slate-950 text-white hover:bg-slate-800"
+  }`}
+>
+  {isSelected ? "Selected package" : "Choose package"}
+</button>
                           </div>
 
                           <button
-                            type="button"
-                            onClick={() => handleCustomizePackage(pkg.id)}
-                            className="mt-2 w-full rounded-full border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
-                          >
-                            Customize this package
-                          </button>
+  type="button"
+  onClick={() => handleCustomizePackage(pkg.id)}
+  className={`mt-2 w-full rounded-full border px-4 py-3 text-sm font-semibold transition ${
+    isSelected
+      ? "border-orange-300 bg-white text-orange-700 hover:bg-orange-50"
+      : "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+  }`}
+>
+  Customize this package
+</button>
                         </div>
                       </article>
-                    ))}
+  );
+})}
                   </div>
 
                   {packageCards.length === 0 ? (
