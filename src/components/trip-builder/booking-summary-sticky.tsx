@@ -67,17 +67,33 @@ export function BookingSummarySticky({
           {selectedPackageTitle ? <Row label="Package" value={selectedPackageTitle} /> : null}
         </div>
 
-        <div className="rounded-2xl border border-sky-100 bg-sky-50 p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-sky-600">
-            Current estimated total
-          </p>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
-            {estimatedPrice ? `₹${estimatedPrice.toLocaleString("en-IN")}` : "—"}
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            Estimate updates from package, hotel comfort, transfers, sightseeing, extras, and service fee.
-          </p>
-        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3.5">
+  <p className="text-[11px] uppercase tracking-[0.16em] text-orange-600">
+    Current estimate
+  </p>
+
+  <div className="mt-2 flex items-end justify-between gap-3">
+    <p className="text-3xl font-bold leading-none tracking-tight text-slate-950">
+      {estimatedPrice ? `₹${estimatedPrice.toLocaleString("en-IN")}` : "—"}
+    </p>
+    <p className="text-sm font-medium text-slate-500 whitespace-nowrap">
+      ₹36,900 / person
+    </p>
+  </div>
+
+  <p className="mt-2 text-sm text-slate-500">
+    02 Apr 2026 · 2 guests · 1 room
+  </p>
+
+  <div className="mt-3 grid grid-cols-2 gap-3">
+    <button className="rounded-full bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white">
+      Choose
+    </button>
+    <button className="rounded-full border border-orange-300 bg-orange-50 px-4 py-2.5 text-sm font-semibold text-orange-700">
+      Customize
+    </button>
+  </div>
+</div>
 
         <button
           type="button"

@@ -3,28 +3,14 @@
 import { useMemo } from "react";
 import { hotels } from "@/data/hotels";
 import { transfers } from "@/data/transfers";
-import { DateRangePicker } from "./date-range-picker";
-import { BangkokAreaSelector } from "./bangkok-area-selector";
-import { TravelersSelector } from "./travelers-selector";
-import { BudgetSelector } from "./budget-selector";
 
 type Props = {
   step: number;
-  checkIn: string;
-  checkOut: string;
-  area: string;
-  adults: number;
-  children: number;
-  rooms: number;
   budget: string;
   hotelCategory: string;
   transferType: string;
   selectedSightseeing: string[];
   selectedExtras: string[];
-  onDatesChange: (values: { checkIn?: string; checkOut?: string }) => void;
-  onAreaChange: (value: string) => void;
-  onTravelersChange: (values: { adults?: number; children?: number; rooms?: number }) => void;
-  onBudgetChange: (value: string) => void;
   onHotelCategoryChange: (value: string) => void;
   onTransferTypeChange: (value: string) => void;
   onToggleSightseeing: (id: string) => void;
@@ -32,53 +18,17 @@ type Props = {
   onStepChange: (step: number) => void;
 };
 
-const steps = ["Basics", "Stay", "Transfers", "Sightseeing", "Extras", "Review"];
+const steps = ["Stay", "Transfers", "Sightseeing", "Extras", "Review"];
 const hotelCategories = ["3 Star", "4 Star", "5 Star"];
 const transferOptions = ["Shared", "Private", "Premium Private"];
 
 const sightseeingItems = [
-  {
-    id: "ss-001",
-    title: "Safari World",
-    category: "Family",
-    duration: "Half day to full day",
-    price: 2200,
-  },
-  {
-    id: "ss-002",
-    title: "Bangkok Temple & City Tour",
-    category: "Classic",
-    duration: "Half day",
-    price: 1800,
-  },
-  {
-    id: "ss-003",
-    title: "Chaophraya Dinner Cruise",
-    category: "Evening",
-    duration: "Evening",
-    price: 2600,
-  },
-  {
-    id: "ss-004",
-    title: "Shopping + Local Market Circuit",
-    category: "Leisure",
-    duration: "Flexible",
-    price: 1400,
-  },
-  {
-    id: "ss-005",
-    title: "Floating Market Excursion",
-    category: "Day tour",
-    duration: "Morning heavy",
-    price: 2400,
-  },
-  {
-    id: "ss-006",
-    title: "Nightlife Drop + Pickup Support",
-    category: "Night",
-    duration: "Night",
-    price: 1900,
-  },
+  { id: "ss-001", title: "Safari World", category: "Family", duration: "Half day to full day", price: 2200 },
+  { id: "ss-002", title: "Bangkok Temple & City Tour", category: "Classic", duration: "Half day", price: 1800 },
+  { id: "ss-003", title: "Chaophraya Dinner Cruise", category: "Evening", duration: "Evening", price: 2600 },
+  { id: "ss-004", title: "Shopping + Local Market Circuit", category: "Leisure", duration: "Flexible", price: 1400 },
+  { id: "ss-005", title: "Floating Market Excursion", category: "Day tour", duration: "Morning heavy", price: 2400 },
+  { id: "ss-006", title: "Nightlife Drop + Pickup Support", category: "Night", duration: "Night", price: 1900 },
 ];
 
 const extraOptions = [
@@ -97,7 +47,7 @@ function normalizeTransferLabel(value: string) {
 }
 
 export function CustomTripFlow(props: Props) {
-  const activeStep = useMemo(() => Math.min(Math.max(props.step, 1), 6), [props.step]);
+  const activeStep = useMemo(() => Math.min(Math.max(props.step, 1), 5), [props.step]);
 
   const matchingHotels = useMemo(
     () =>
@@ -148,24 +98,6 @@ export function CustomTripFlow(props: Props) {
       </div>
 
       {activeStep === 1 ? (
-        <div className="space-y-6">
-          <DateRangePicker
-            checkIn={props.checkIn}
-            checkOut={props.checkOut}
-            onChange={props.onDatesChange}
-          />
-          <TravelersSelector
-            adults={props.adults}
-            children={props.children}
-            rooms={props.rooms}
-            onChange={props.onTravelersChange}
-          />
-          <BangkokAreaSelector value={props.area} onChange={props.onAreaChange} />
-          <BudgetSelector value={props.budget} onChange={props.onBudgetChange} />
-        </div>
-      ) : null}
-
-      {activeStep === 2 ? (
         <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-lg font-semibold tracking-tight text-slate-950">Choose your stay</p>
           <p className="mt-1 text-sm text-slate-600">
@@ -219,11 +151,11 @@ export function CustomTripFlow(props: Props) {
         </div>
       ) : null}
 
-      {activeStep === 3 ? (
+      {activeStep === 2 ? (
         <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-lg font-semibold tracking-tight text-slate-950">Choose transfers</p>
           <p className="mt-1 text-sm text-slate-600">
-            This controls the movement style. Vehicle size is auto-handled later from passenger count.
+            Select movement style. Vehicle sizing is handled automatically.
           </p>
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
@@ -265,11 +197,11 @@ export function CustomTripFlow(props: Props) {
         </div>
       ) : null}
 
-      {activeStep === 4 ? (
+      {activeStep === 3 ? (
         <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-lg font-semibold tracking-tight text-slate-950">Add sightseeing</p>
           <p className="mt-1 text-sm text-slate-600">
-            Choose activities that fit your trip rhythm. These are placeholder Bangkok options for now.
+            Choose activities you want to include.
           </p>
 
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
@@ -291,9 +223,7 @@ export function CustomTripFlow(props: Props) {
                       <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700">
                         {item.category}
                       </span>
-                      <p className="mt-3 text-base font-semibold text-slate-950">
-                        {item.title}
-                      </p>
+                      <p className="mt-3 text-base font-semibold text-slate-950">{item.title}</p>
                       <p className="mt-1 text-sm text-slate-600">{item.duration}</p>
                     </div>
 
@@ -308,7 +238,7 @@ export function CustomTripFlow(props: Props) {
         </div>
       ) : null}
 
-      {activeStep === 5 ? (
+      {activeStep === 4 ? (
         <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-lg font-semibold tracking-tight text-slate-950">Add useful extras</p>
           <p className="mt-1 text-sm text-slate-600">Choose the extras you want included.</p>
@@ -335,20 +265,16 @@ export function CustomTripFlow(props: Props) {
         </div>
       ) : null}
 
-      {activeStep === 6 ? (
+      {activeStep === 5 ? (
         <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-lg font-semibold tracking-tight text-slate-950">
-            Review your custom trip
+            Review your custom trip choices
           </p>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
-            <ReviewCard label="Area" value={props.area || "Not selected"} />
             <ReviewCard label="Budget" value={props.budget || "Not selected"} />
             <ReviewCard label="Hotel category" value={props.hotelCategory || "Not selected"} />
             <ReviewCard label="Transfers" value={props.transferType || "Not selected"} />
-            <ReviewCard
-              label="Sightseeing"
-              value={`${props.selectedSightseeing.length} selected`}
-            />
+            <ReviewCard label="Sightseeing" value={`${props.selectedSightseeing.length} selected`} />
             <ReviewCard label="Extras" value={`${props.selectedExtras.length} selected`} />
           </div>
         </div>
@@ -365,10 +291,10 @@ export function CustomTripFlow(props: Props) {
 
         <button
           type="button"
-          onClick={() => props.onStepChange(Math.min(6, activeStep + 1))}
+          onClick={() => props.onStepChange(Math.min(5, activeStep + 1))}
           className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
         >
-          {activeStep === 6 ? "Continue booking" : "Next step"}
+          {activeStep === 5 ? "Continue booking" : "Next step"}
         </button>
       </div>
     </div>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PublicHeader } from "@/components/public/public-header";
 import { PublicFooter } from "@/components/public/public-footer";
-import { readyPackages } from "@/lib/mock/bangkok-builder-data";
+import { readyPackages, standardPackages } from "@/lib/mock/bangkok-builder-data";
 import { getRecommendedPackages } from "@/lib/helpers/recommendation";
 import { useTripBuilderStore } from "@/store/useTripBuilderStore";
 
@@ -19,6 +19,7 @@ export default function ResultsPage() {
   const travelStyle = useTripBuilderStore((state) => state.travelStyle);
   const selectedPackageId = useTripBuilderStore((state) => state.selectedPackageId);
   const selectPackage = useTripBuilderStore((state) => state.selectPackage);
+  const setTotals = useTripBuilderStore((state) => state.setTotals);
 
   const tripLabel = segments
     .map((segment) => segment.city)
@@ -26,34 +27,33 @@ export default function ResultsPage() {
     .join(" → ");
 
   const recommendedPackages = getRecommendedPackages(
-    readyPackages.map((item, index) => ({
-      id: item.id,
-      title: item.title,
-      basePrice: item.price,
-      popularityScore: index === 0 ? 10 : 7 - index,
-      marginScore: item.hotelCategory === "4 Star" ? 8 : 7,
-      budgetFitScore:
-        budget === "Luxury"
-          ? item.price >= 40000
+    readyPackages
+      .map((item, index) => ({
+        id: item.id,
+        title: item.title,
+        basePrice: item.price,
+        popularityScore: Math.max(10 - index, 5),
+        marginScore: item.hotelCategory === "4 Star" ? 8 : 6,
+        budgetFitScore:
+          budget === "Luxury"
+            ? item.price >= 50000
+              ? 9
+              : 5
+            : budget === "Premium"
+            ? item.price >= 35000 && item.price < 55000
+              ? 9
+              : 6
+            : item.price < 35000
             ? 9
-            : 5
-          : budget === "Premium"
-          ? item.price >= 30000 && item.price < 50000
+            : 6,
+        tripMoodFitScore:
+          travelStyle === "Mixed"
+            ? 8
+            : item.title.toLowerCase().includes(travelStyle.toLowerCase().split(" ")[0])
             ? 9
-            : 6
-          : budget === "Economy"
-          ? item.price < 32000
-            ? 9
-            : 5
-          : 8,
-      tripMoodFitScore:
-        travelStyle === "Mixed"
-          ? 8
-          : item.title.toLowerCase().includes(travelStyle.toLowerCase().split(" ")[0])
-          ? 9
-          : 6,
-      recommendedLabel: item.tag,
-    }))
+            : 6,
+        recommendedLabel: item.tag,
+      }))
       .map((scored) => {
         const original = readyPackages.find((pkg) => pkg.id === scored.id)!;
         return {
@@ -63,19 +63,18 @@ export default function ResultsPage() {
       })
       .sort((a, b) => {
         const aScore =
-          (a.score.popularityScore || 0) +
-          (a.score.marginScore || 0) +
-          (a.score.budgetFitScore || 0) +
-          (a.score.tripMoodFitScore || 0);
+          a.score.popularityScore +
+          a.score.marginScore +
+          a.score.budgetFitScore +
+          a.score.tripMoodFitScore;
         const bScore =
-          (b.score.popularityScore || 0) +
-          (b.score.marginScore || 0) +
-          (b.score.budgetFitScore || 0) +
-          (b.score.tripMoodFitScore || 0);
+          b.score.popularityScore +
+          b.score.marginScore +
+          b.score.budgetFitScore +
+          b.score.tripMoodFitScore;
 
         return bScore - aScore;
       })
-      .map((item) => item)
   );
 
   function handlePackageSelect(item: (typeof readyPackages)[number]) {
@@ -83,7 +82,36 @@ export default function ResultsPage() {
       selectedPackageId: item.id,
       selectedPackageTitle: item.title,
       selectedPackagePrice: item.price,
+      selectedFlightMode: 0,
+      selectedFlightLabel: "Without Flight",
     });
+
+    const backingPackage = standardPackages.find((pkg) => pkg.id === item.id);
+
+    if (backingPackage) {
+      const subtotal = Math.max(item.price, 0);
+      const hotelTotal = Math.round(subtotal * 0.46);
+      const transferTotal = Math.round(subtotal * 0.1);
+      const sightseeingTotal = Math.round(subtotal * 0.14);
+      const mealsTotal = Math.round(subtotal * 0.08);
+      const serviceFee = Math.max(3000, Math.round(subtotal * 0.05));
+      const grandTotal =
+        subtotal +
+        hotelTotal +
+        transferTotal +
+        sightseeingTotal +
+        mealsTotal +
+        serviceFee;
+
+      setTotals({
+        estimatedFlightTotal: 0,
+        estimatedHotelTotal: hotelTotal,
+        estimatedTransferTotal: transferTotal,
+        estimatedSightseeingTotal: sightseeingTotal,
+        estimatedMealsTotal: mealsTotal,
+        estimatedGrandTotal: grandTotal,
+      });
+    }
 
     router.push("/customize");
   }
@@ -131,7 +159,7 @@ export default function ResultsPage() {
                 {[
                   `Budget: ${budget}`,
                   "Package-led recommendations",
-                  "Custom edits available next",
+                  "Flight choice happens in builder flow",
                 ].map((item) => (
                   <span
                     key={item}
@@ -170,8 +198,8 @@ export default function ResultsPage() {
               <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.05)]">
                 <p className="text-sm font-medium text-sky-700">Planning Note</p>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  Select a package to continue. In the next step you can refine room preference,
-                  extras, and trip-level choices before review.
+                  Results can still route to customize directly, but the main builder now handles
+                  the with-flight and without-flight choice more cleanly.
                 </p>
               </div>
             </aside>
@@ -248,19 +276,12 @@ export default function ResultsPage() {
                             {isSelected ? "Continue to Customize" : "Select Package"}
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              selectPackage({
-                                selectedPackageId: item.id,
-                                selectedPackageTitle: item.title,
-                                selectedPackagePrice: item.price,
-                              })
-                            }
+                          <Link
+                            href="/trip-builder"
                             className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
                           >
-                            {isSelected ? "Package Selected" : "Save Selection"}
-                          </button>
+                            Open Builder for Flight Choice
+                          </Link>
                         </div>
                       </div>
                     </div>

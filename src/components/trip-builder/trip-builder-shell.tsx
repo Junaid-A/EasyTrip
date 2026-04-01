@@ -1,14 +1,15 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   CalendarDays,
+  Check,
   ChevronRight,
   Filter,
   MapPin,
   Minus,
+  Plane,
   Plus,
   Sparkles,
   Users,
@@ -27,8 +28,10 @@ import {
 } from "@/lib/mock/bangkok-builder-data";
 import { useTripBuilderStore } from "@/store/useTripBuilderStore";
 
-type DurationFilter = "all" | "4-5" | "6-7";
-type PriceFilter = "all" | "upto-40" | "40-55" | "55-plus";
+type DurationFilter = "all" | "4-5" | "6-7" | "8-9" | "10-11";
+type PriceFilter = "all" | "upto-40" | "40-55" | "55-75" | "75-plus";
+type HotelFilter = "all" | "3 Star" | "4 Star";
+type FlightFilter = "all" | "with-flight" | "without-flight";
 type BuilderMode = "standard" | "ai" | "custom";
 
 function formatINR(value: number) {
@@ -69,7 +72,8 @@ function calculatePackagePrice(
   pkg: StandardPackage,
   adults: number,
   children: number,
-  rooms: number
+  rooms: number,
+  flightSelectionValue: 0 | 1
 ) {
   const adultTotal = pkg.basePricePerPerson * adults;
   const childTotal = Math.round(pkg.basePricePerPerson * 0.72 * children);
@@ -79,16 +83,21 @@ function calculatePackagePrice(
     Math.round((adultTotal + childTotal + roomAdjustment) * 0.05)
   );
 
-  const total = adultTotal + childTotal + roomAdjustment + serviceFee;
+  const total =
+    adultTotal + childTotal + roomAdjustment + serviceFee + flightSelectionValue;
 
   return {
     pricePerPerson: pkg.basePricePerPerson,
     totalPrice: Math.round(total),
     serviceFee,
+    flightSelectionValue,
   };
 }
 
-function buildSegments(citySplit: StandardPackage["citySplit"], departureDate: string) {
+function buildSegments(
+  citySplit: StandardPackage["citySplit"],
+  departureDate: string
+) {
   const segments: Array<{
     id: string;
     city: string;
@@ -121,8 +130,12 @@ function buildSegments(citySplit: StandardPackage["citySplit"], departureDate: s
   return segments;
 }
 
-function buildStorePricingBreakdown(totalPrice: number, serviceFee: number) {
-  const subtotal = Math.max(totalPrice - serviceFee, 0);
+function buildStorePricingBreakdown(
+  totalPrice: number,
+  serviceFee: number,
+  flightSelectionValue: 0 | 1
+) {
+  const subtotal = Math.max(totalPrice - serviceFee - flightSelectionValue, 0);
 
   const hotelTotal = Math.round(subtotal * 0.46);
   const transferTotal = Math.round(subtotal * 0.1);
@@ -133,6 +146,7 @@ function buildStorePricingBreakdown(totalPrice: number, serviceFee: number) {
 
   return {
     basePackage,
+    flightTotal: flightSelectionValue,
     hotelTotal,
     transferTotal,
     sightseeingTotal,
@@ -141,6 +155,40 @@ function buildStorePricingBreakdown(totalPrice: number, serviceFee: number) {
   };
 }
 
+function matchesDuration(pkg: StandardPackage, durationFilter: DurationFilter) {
+  if (durationFilter === "all") return true;
+  if (durationFilter === "4-5") return pkg.durationNights >= 4 && pkg.durationNights <= 5;
+  if (durationFilter === "6-7") return pkg.durationNights >= 6 && pkg.durationNights <= 7;
+  if (durationFilter === "8-9") return pkg.durationNights >= 8 && pkg.durationNights <= 9;
+  return pkg.durationNights >= 10 && pkg.durationNights <= 11;
+}
+
+function matchesPrice(pkg: StandardPackage, priceFilter: PriceFilter) {
+  if (priceFilter === "all") return true;
+  if (priceFilter === "upto-40") return pkg.basePricePerPerson <= 40000;
+  if (priceFilter === "40-55")
+    return pkg.basePricePerPerson > 40000 && pkg.basePricePerPerson <= 55000;
+  if (priceFilter === "55-75")
+    return pkg.basePricePerPerson > 55000 && pkg.basePricePerPerson <= 75000;
+  return pkg.basePricePerPerson > 75000;
+}
+
+function matchesHotel(pkg: StandardPackage, hotelFilter: HotelFilter) {
+  return hotelFilter === "all" ? true : pkg.hotelCategory === hotelFilter;
+}
+
+function matchesFlight(pkg: StandardPackage, flightFilter: FlightFilter) {
+  if (flightFilter === "all") return true;
+  if (flightFilter === "with-flight") return pkg.includedFlights;
+  return !pkg.includedFlights;
+}
+
+const defaultRepresentativeByFamily = new Map(
+  standardPackages
+    .filter((pkg) => pkg.hotelCategory === "4 Star" && !pkg.includedFlights)
+    .map((pkg) => [pkg.packageFamilyId, pkg])
+);
+
 export function TripBuilderShell() {
   const router = useRouter();
 
@@ -148,14 +196,14 @@ export function TripBuilderShell() {
   const setTravelers = useTripBuilderStore((state) => state.setTravelers);
   const selectPackage = useTripBuilderStore((state) => state.selectPackage);
   const setTotals = useTripBuilderStore((state) => state.setTotals);
+  const setDayPlans = useTripBuilderStore((state) => state.setDayPlans);
 
   const [mode, setMode] = useState<BuilderMode>("standard");
   const [activeCategory, setActiveCategory] = useState<PackageCategory>("all");
-  const [hotelFilter, setHotelFilter] = useState<"all" | "3 Star" | "4 Star" | "5 Star">(
-    "all"
-  );
+  const [hotelFilter, setHotelFilter] = useState<HotelFilter>("all");
   const [durationFilter, setDurationFilter] = useState<DurationFilter>("all");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
+  const [flightFilter, setFlightFilter] = useState<FlightFilter>("all");
 
   const [departureCityId, setDepartureCityId] = useState("dep-bangalore");
   const [destinationCity, setDestinationCity] = useState("Bangkok");
@@ -169,6 +217,8 @@ export function TripBuilderShell() {
   const [detailPackageId, setDetailPackageId] = useState<string | null>(null);
   const [customSeedPackageId, setCustomSeedPackageId] = useState<string | null>(null);
 
+  const [flightModalFamilyId, setFlightModalFamilyId] = useState<string | null>(null);
+
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
@@ -177,52 +227,82 @@ export function TripBuilderShell() {
 
   const totalTravellers = getTotalTravellers(adults, children);
 
-  const filteredPackages = useMemo(() => {
+  const filteredVariants = useMemo(() => {
     return standardPackages.filter((pkg) => {
       const categoryMatch =
         activeCategory === "all" ? true : pkg.category.includes(activeCategory);
 
-      const hotelMatch = hotelFilter === "all" ? true : pkg.hotelCategory === hotelFilter;
-
-      const durationMatch =
-        durationFilter === "all"
-          ? true
-          : durationFilter === "4-5"
-          ? pkg.durationNights >= 4 && pkg.durationNights <= 5
-          : pkg.durationNights >= 6 && pkg.durationNights <= 7;
-
-      const priceMatch =
-        priceFilter === "all"
-          ? true
-          : priceFilter === "upto-40"
-            ? pkg.basePricePerPerson <= 40000
-            : priceFilter === "40-55"
-              ? pkg.basePricePerPerson > 40000 && pkg.basePricePerPerson <= 55000
-              : pkg.basePricePerPerson > 55000;
-
-      return categoryMatch && hotelMatch && durationMatch && priceMatch;
+      return (
+        categoryMatch &&
+        matchesHotel(pkg, hotelFilter) &&
+        matchesDuration(pkg, durationFilter) &&
+        matchesPrice(pkg, priceFilter) &&
+        matchesFlight(pkg, flightFilter)
+      );
     });
-  }, [activeCategory, durationFilter, hotelFilter, priceFilter]);
+  }, [activeCategory, hotelFilter, durationFilter, priceFilter, flightFilter]);
 
-  const packageCards = useMemo(() => {
-    return filteredPackages.map((pkg) => ({
-      ...pkg,
-      pricing: calculatePackagePrice(pkg, adults, children, rooms),
-    }));
-  }, [filteredPackages, adults, children, rooms]);
+  const familyCards = useMemo(() => {
+    const familyIds = [...new Set(filteredVariants.map((pkg) => pkg.packageFamilyId))];
+
+    return familyIds
+      .map((familyId) => {
+        const familyVariants = standardPackages.filter(
+          (pkg) => pkg.packageFamilyId === familyId
+        );
+
+        const preferred =
+          familyVariants.find(
+            (pkg) =>
+              matchesHotel(pkg, hotelFilter) &&
+              matchesDuration(pkg, durationFilter) &&
+              matchesPrice(pkg, priceFilter) &&
+              pkg.hotelCategory === "4 Star" &&
+              !pkg.includedFlights
+          ) ??
+          familyVariants.find(
+            (pkg) =>
+              matchesHotel(pkg, hotelFilter) &&
+              matchesDuration(pkg, durationFilter) &&
+              matchesPrice(pkg, priceFilter)
+          ) ??
+          defaultRepresentativeByFamily.get(familyId) ??
+          familyVariants[0];
+
+        return {
+          representative: preferred,
+          variants: familyVariants,
+          hasWithFlight: familyVariants.some((pkg) => pkg.includedFlights),
+          hasWithoutFlight: familyVariants.some((pkg) => !pkg.includedFlights),
+        };
+      })
+      .sort((a, b) => a.representative.basePricePerPerson - b.representative.basePricePerPerson);
+  }, [filteredVariants, hotelFilter, durationFilter, priceFilter]);
 
   const selectedPackage =
-    packageCards.find((pkg) => pkg.id === selectedPackageId) ?? null;
+    selectedPackageId != null
+      ? standardPackages.find((pkg) => pkg.id === selectedPackageId) ?? null
+      : null;
 
   const detailPackage =
-    packageCards.find((pkg) => pkg.id === detailPackageId) ?? null;
+    detailPackageId != null
+      ? standardPackages.find((pkg) => pkg.id === detailPackageId) ?? null
+      : null;
 
-  function syncPackageToStore(pkg: (typeof packageCards)[number]) {
+  const flightModalFamily =
+    flightModalFamilyId != null
+      ? familyCards.find((item) => item.representative.packageFamilyId === flightModalFamilyId) ??
+        null
+      : null;
+
+  function syncPackageToStore(pkg: StandardPackage, flightSelectionValue: 0 | 1) {
     const segments = buildSegments(pkg.citySplit, departureDate);
     const endDate = segments.at(-1)?.checkOut ?? departureDate;
+    const priced = calculatePackagePrice(pkg, adults, children, rooms, flightSelectionValue);
     const pricing = buildStorePricingBreakdown(
-      pkg.pricing.totalPrice,
-      pkg.pricing.serviceFee
+      priced.totalPrice,
+      priced.serviceFee,
+      flightSelectionValue
     );
 
     setTripDetails({
@@ -236,31 +316,35 @@ export function TripBuilderShell() {
         pkg.basePricePerPerson <= 40000
           ? "Comfort"
           : pkg.basePricePerPerson <= 55000
-            ? "Premium"
-            : "Luxury",
+          ? "Premium"
+          : "Luxury",
       travelStyle:
         activeCategory === "honeymoon"
           ? "Luxury"
           : activeCategory === "family"
-            ? "Family Fun"
-            : activeCategory === "beach"
-              ? "Relaxed"
-              : "Mixed",
+          ? "Family Fun"
+          : activeCategory === "beach"
+          ? "Relaxed"
+          : "Mixed",
       travellingWith:
         adults >= 2 && children === 0 ? "Couple" : children > 0 ? "Family" : "Group",
-      priority: pkg.hotelCategory === "5 Star" ? "Better hotel" : "Balanced trip",
-      serviceFee: pkg.pricing.serviceFee,
+      priority: pkg.hotelCategory === "4 Star" ? "Better hotel" : "Balanced trip",
+      serviceFee: priced.serviceFee,
     });
 
     setTravelers({ adults, children, rooms });
+    setDayPlans(pkg.dayPlan);
 
     selectPackage({
       selectedPackageId: pkg.id,
       selectedPackageTitle: pkg.title,
       selectedPackagePrice: pricing.basePackage,
+      selectedFlightMode: flightSelectionValue,
+      selectedFlightLabel: flightSelectionValue === 1 ? "With Flight" : "Without Flight",
     });
 
     setTotals({
+      estimatedFlightTotal: pricing.flightTotal,
       estimatedHotelTotal: pricing.hotelTotal,
       estimatedTransferTotal: pricing.transferTotal,
       estimatedSightseeingTotal: pricing.sightseeingTotal,
@@ -269,34 +353,49 @@ export function TripBuilderShell() {
     });
   }
 
-  function handleSelectPackage(packageId: string) {
-    setSelectedPackageId(packageId);
-    const pkg = packageCards.find((item) => item.id === packageId);
-    if (pkg) syncPackageToStore(pkg);
+  function openFlightChoice(familyId: string) {
+    setFlightModalFamilyId(familyId);
+  }
+
+  function handleChooseFlightOption(flightSelectionValue: 0 | 1) {
+    if (!flightModalFamily) return;
+
+    const chosen =
+      flightModalFamily.variants.find(
+        (pkg) =>
+          pkg.includedFlights === (flightSelectionValue === 1) &&
+          (hotelFilter === "all" ? true : pkg.hotelCategory === hotelFilter)
+      ) ??
+      flightModalFamily.variants.find(
+        (pkg) => pkg.includedFlights === (flightSelectionValue === 1)
+      ) ??
+      flightModalFamily.representative;
+
+    setSelectedPackageId(chosen.id);
+    syncPackageToStore(chosen, flightSelectionValue);
+    setFlightModalFamilyId(null);
   }
 
   function handleOpenDetail(packageId: string) {
     setDetailPackageId(packageId);
   }
 
-  function handleCloseDetail() {
-    setDetailPackageId(null);
-  }
-
   function handleCustomizePackage(packageId: string) {
-    setSelectedPackageId(packageId);
-    setCustomSeedPackageId(packageId);
+    const pkg =
+      standardPackages.find((item) => item.id === packageId) ??
+      standardPackages.find((item) => item.packageFamilyId === packageId);
 
-    const pkg = packageCards.find((item) => item.id === packageId);
-    if (pkg) syncPackageToStore(pkg);
+    if (!pkg) return;
 
+    setSelectedPackageId(pkg.id);
+    setCustomSeedPackageId(pkg.id);
+    syncPackageToStore(pkg, pkg.includedFlights ? 1 : 0);
     setMode("custom");
     setDetailPackageId(null);
   }
 
   function handleContinueBooking() {
     if (!selectedPackage) return;
-    syncPackageToStore(selectedPackage);
     router.push("/customize");
   }
 
@@ -304,19 +403,42 @@ export function TripBuilderShell() {
     setHotelFilter("all");
     setDurationFilter("all");
     setPriceFilter("all");
+    setFlightFilter("all");
     setActiveCategory("all");
   }
 
-  const activeFilterCount =
-    Number(hotelFilter !== "all") +
-    Number(durationFilter !== "all") +
-    Number(priceFilter !== "all");
+  const categoryCounts = useMemo(() => {
+    return categoryTabs.reduce<Record<string, number>>((acc, tab) => {
+      if (tab.value === "all") {
+        acc[tab.value] = [...new Set(standardPackages.map((pkg) => pkg.packageFamilyId))].length;
+      } else {
+        acc[tab.value] = [
+          ...new Set(
+            standardPackages
+              .filter((pkg) => pkg.category.includes(tab.value))
+              .map((pkg) => pkg.packageFamilyId)
+          ),
+        ].length;
+      }
+      return acc;
+    }, {});
+  }, []);
+
+  const selectedPackageSummaryTotal = selectedPackage
+    ? calculatePackagePrice(
+        selectedPackage,
+        adults,
+        children,
+        rooms,
+        selectedPackage.includedFlights ? 1 : 0
+      ).totalPrice
+    : null;
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#f7f3ee_0%,#f8fafc_48%,#ffffff_100%)] text-slate-950">
       {!mobileSearchOpen && !mobileFiltersOpen ? <PublicHeader /> : null}
 
-      <main className="pb-28 pt-28 sm:pt-32 lg:pt-36">
+      <main className="pb-32 pt-24 sm:pt-28 lg:pt-36">
         <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="hidden overflow-hidden rounded-[36px] border border-black/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.94)_0%,rgba(254,247,237,0.9)_52%,rgba(255,255,255,0.95)_100%)] shadow-[0_24px_80px_rgba(15,23,42,0.08)] lg:block">
             <div className="border-b border-black/5 px-8 py-8">
@@ -325,11 +447,10 @@ export function TripBuilderShell() {
                   Thailand Planner
                 </span>
                 <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950">
-                  Plan cleaner Thailand trips with ready packages, AI help, or a full custom build.
+                  Cleaner package cards, better filters, and one flight choice before the next step.
                 </h1>
                 <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-                  Keep the homepage tone, reduce confusion, and move customers into the right
-                  booking path faster.
+                  Standard packages stay simple. Once a customer wants edits, move them into Custom.
                 </p>
               </div>
             </div>
@@ -353,13 +474,7 @@ export function TripBuilderShell() {
                   value={destinationCity}
                   onChange={setDestinationCity}
                   icon={<MapPin className="h-4 w-4" />}
-                  options={[
-                    {
-                      value: "Bangkok",
-                      label: "Bangkok",
-                      description: "Thailand",
-                    },
-                  ]}
+                  options={[{ value: "Bangkok", label: "Bangkok", description: "Thailand" }]}
                 />
 
                 <SearchDateField
@@ -390,14 +505,14 @@ export function TripBuilderShell() {
           </div>
 
           <div className="lg:hidden">
-            <div className="rounded-[26px] border border-black/10 bg-white p-3 shadow-[0_14px_40px_rgba(15,23,42,0.08)]">
-              <div className="flex items-center justify-between gap-3">
+            <div className="rounded-[22px] border border-black/10 bg-white p-2.5 shadow-[0_10px_28px_rgba(15,23,42,0.06)]">
+              <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => setMobileSearchOpen(true)}
-                  className="min-w-0 flex-1 rounded-[20px] bg-slate-50 px-4 py-3 text-left"
+                  className="min-w-0 flex-1 rounded-[18px] bg-slate-50 px-4 py-3 text-left"
                 >
-                  <p className="truncate text-sm font-semibold text-slate-950">
+                  <p className="truncate text-[15px] font-semibold text-slate-950">
                     {selectedDepartureCity.city} → {destinationCity}
                   </p>
                   <p className="mt-1 truncate text-xs text-slate-500">
@@ -410,16 +525,15 @@ export function TripBuilderShell() {
                 <button
                   type="button"
                   onClick={() => setMobileFiltersOpen(true)}
-                  className="inline-flex h-12 shrink-0 items-center gap-2 rounded-[18px] border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700"
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] border border-slate-200 bg-white text-slate-700"
                 >
                   <Filter className="h-4 w-4" />
-                  {activeFilterCount > 0 ? activeFilterCount : null}
                 </button>
               </div>
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
             <ModeCard
               active={mode === "standard"}
               title="Standard"
@@ -444,23 +558,20 @@ export function TripBuilderShell() {
           </div>
 
           {mode === "standard" && (
-            <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_330px]">
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
               <div className="min-w-0 space-y-6">
-                <section className="min-w-0 overflow-hidden rounded-[32px] border border-slate-200 bg-white p-4 shadow-[0_20px_60px_rgba(15,23,42,0.05)] sm:p-6">
-                  <div className="flex flex-col gap-4 border-b border-slate-200 pb-5">
+                <section className="min-w-0">
+                  <div className="flex flex-col gap-2 border-b border-slate-200 pb-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-600">
-                          Curated
-                        </p>
-                        <h2 className="mt-1 text-xl font-semibold text-slate-950 sm:text-2xl">
+                        <h2 className="text-xl font-semibold text-slate-950 sm:text-2xl">
                           Standard Thailand packages
                         </h2>
                       </div>
 
                       <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 sm:inline-flex">
                         <Filter className="h-4 w-4" />
-                        Filters
+                        {familyCards.length} package families
                       </div>
                     </div>
 
@@ -479,192 +590,179 @@ export function TripBuilderShell() {
                                 : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                             }`}
                           >
-                            {tab.label}
+                            {tab.label} ({categoryCounts[tab.value] ?? 0})
                           </button>
                         );
                       })}
                     </div>
                   </div>
 
-                  <div className="mt-5 hidden grid-cols-3 gap-3 md:grid">
-                    <FilterCard
-                      label="Hotel Class"
-                      value={hotelFilter}
-                      onChange={(value) =>
-                        setHotelFilter(value as "all" | "3 Star" | "4 Star" | "5 Star")
-                      }
-                      options={[
-                        { value: "all", label: "All hotels" },
-                        { value: "3 Star", label: "3 Star" },
-                        { value: "4 Star", label: "4 Star" },
-                        { value: "5 Star", label: "5 Star" },
-                      ]}
-                    />
-                    <FilterCard
-                      label="Trip Length"
-                      value={durationFilter}
-                      onChange={(value) => setDurationFilter(value as DurationFilter)}
-                      options={[
-                        { value: "all", label: "Any length" },
-                        { value: "4-5", label: "4N to 5N" },
-                        { value: "6-7", label: "6N to 7N" },
-                      ]}
-                    />
-                    <FilterCard
-                      label="Budget Band"
-                      value={priceFilter}
-                      onChange={(value) => setPriceFilter(value as PriceFilter)}
-                      options={[
-                        { value: "all", label: "All budgets" },
-                        { value: "upto-40", label: "Up to ₹40K" },
-                        { value: "40-55", label: "₹40K to ₹55K" },
-                        { value: "55-plus", label: "₹55K+" },
-                      ]}
-                    />
-                  </div>
-
-                  <div className="mt-5 min-w-0 overflow-hidden rounded-[24px] border border-orange-100 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_100%)] px-4 py-4">
+                  <div className="mt-3 rounded-[18px] border border-orange-100 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_100%)] px-4 py-2.5">
                     <p className="break-words text-sm font-semibold text-slate-900">
                       Departing from {selectedDepartureCity.city} · {selectedDepartureCity.airportCode}
                     </p>
                     <p className="mt-1 break-words text-sm text-slate-600">
-                      Bangkok is fixed as the destination entry point for this flow. Departure set for{" "}
-                      <span className="font-semibold text-slate-900">
-                        {formatLongDate(departureDate)}
-                      </span>
-                      .
+                      Flight is asked only once when selecting the package.
                     </p>
                   </div>
 
-                  <div className="mt-6 grid min-w-0 gap-5 lg:grid-cols-2">
-                    {packageCards.map((pkg) => {
-  const isSelected = selectedPackageId === pkg.id;
+                  <div className="mt-4 grid min-w-0 gap-5 lg:grid-cols-2">
+                    {familyCards.map(({ representative, hasWithFlight, hasWithoutFlight }) => {
+                      const isSelected =
+                        selectedPackage?.packageFamilyId === representative.packageFamilyId;
 
-  return (
-                      <article
-  key={pkg.id}
-  className={`min-w-0 max-w-full overflow-hidden rounded-[30px] border transition ${
-    isSelected
-      ? "border-orange-200 bg-orange-50/40 shadow-[0_18px_46px_rgba(249,115,22,0.14)]"
-      : "border-slate-200 bg-white shadow-[0_14px_42px_rgba(15,23,42,0.05)]"
-  }`}
->
-                        <div className={`relative h-44 sm:h-52 bg-gradient-to-br ${pkg.accentFrom} ${pkg.accentTo}`}>
-                          <div className="absolute left-4 top-4 rounded-full bg-white/92 px-3 py-1 text-xs font-semibold text-slate-900">
-                            {pkg.badge}
-                          </div>
+                      const examplePrice = calculatePackagePrice(
+                        representative,
+                        adults,
+                        children,
+                        rooms,
+                        0
+                      );
 
-                          {isSelected ? (
-  <div className="absolute right-4 top-4 rounded-full bg-orange-500 px-3 py-1 text-xs font-semibold text-white shadow-[0_10px_24px_rgba(249,115,22,0.22)]">
-    Selected
-  </div>
-) : null}
-
-                          <div className="absolute bottom-4 left-4 right-4 min-w-0 rounded-[20px] bg-white/92 p-4 backdrop-blur">
-                            <p className="break-words text-base font-semibold text-slate-950 sm:text-lg">
-                              {pkg.title}
-                            </p>
-                            <p className="mt-1 break-words text-xs text-slate-600 sm:text-sm">
-                              {pkg.citySplit
-                                .map((item) => `${item.nights}N ${item.city}`)
-                                .join(" · ")}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="min-w-0 p-4 sm:p-5">
-                          <p className="break-words text-sm leading-6 text-slate-600">{pkg.subtitle}</p>
-
-                          <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                            <FactPill label={`${pkg.durationNights}N / ${pkg.durationDays}D`} />
-                            <FactPill label={pkg.hotelCategory} />
-                            <FactPill
-                              label={pkg.includedFlights ? "With flights" : "Without flights"}
+                      return (
+                        <article
+                          key={representative.packageFamilyId}
+                          className={`min-w-0 max-w-full overflow-hidden rounded-[28px] border bg-white transition-all duration-300 ${
+                            isSelected
+                              ? "border-orange-300 shadow-[0_0_0_2px_rgba(251,146,60,0.38),0_22px_52px_rgba(249,115,22,0.24),0_0_90px_rgba(251,146,60,0.26)] ring-1 ring-orange-300/80"
+                              : "border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.07)]"
+                          }`}
+                        >
+                          <div className="relative h-40 overflow-hidden">
+                            <img
+                              src={
+                                representative.image ||
+                                "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1400&q=80"
+                              }
+                              alt={representative.title}
+                              className="h-full w-full object-cover"
                             />
-                            <FactPill label={`${pkg.activitiesCount} activities`} />
-                          </div>
-
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {pkg.bestFor.map((item) => (
-                              <span
-                                key={item}
-                                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700"
-                              >
-                                {item}
-                              </span>
-                            ))}
-                          </div>
-
-                          <div className="mt-4 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-                            <InfoBullet text={pkg.transferType} />
-                            <InfoBullet text={pkg.mealsLabel} />
-                            {pkg.highlightList.slice(0, 4).map((item) => (
-                              <InfoBullet key={item} text={item} />
-                            ))}
-                          </div>
-
-                          <div className="mt-5 rounded-[22px] bg-slate-50 p-4">
-                            <div className="flex items-end justify-between gap-4">
-                              <div>
-                                <p className="text-sm text-slate-500">From</p>
-                                <p className="text-2xl font-semibold text-slate-950">
-                                  {formatINR(pkg.pricing.pricePerPerson)}
-                                  <span className="ml-1 text-sm font-medium text-slate-500">
-                                    / person
-                                  </span>
-                                </p>
+                            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.02)_0%,rgba(15,23,42,0.18)_100%)]" />
+                            <div className="absolute left-4 top-4 rounded-full bg-white/95 px-4 py-1.5 text-xs font-semibold text-slate-900">
+                              {representative.badge}
+                            </div>
+                            {isSelected ? (
+                              <div className="absolute right-4 top-4 rounded-full bg-orange-500 px-3 py-1 text-xs font-semibold text-white shadow-[0_8px_18px_rgba(249,115,22,0.32)]">
+                                Selected
                               </div>
-                              <div className="text-right">
-                                <p className="text-sm text-slate-500">Trip total</p>
-                                <p className="text-lg font-semibold text-slate-950">
-                                  {formatINR(pkg.pricing.totalPrice)}
+                            ) : null}
+                          </div>
+
+                          <div className="px-4 pb-4 pt-3.5">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0 flex-1">
+                                <h3 className="text-[1.6rem] font-semibold leading-[1.12] tracking-tight text-slate-950">
+                                  {representative.title}
+                                </h3>
+                              </div>
+
+                              <div className="shrink-0 text-right">
+                                <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
+                                  From
+                                </p>
+                                <p className="mt-1 text-3xl font-semibold leading-none text-slate-950">
+                                  {formatINR(examplePrice.pricePerPerson)}
+                                </p>
+                                <p className="mt-1 text-sm text-slate-500">/ person</p>
+                              </div>
+                            </div>
+
+                            <div className="mt-2.5 text-lg text-slate-700">
+                              {representative.citySplit.map((item, index) => (
+                                <span key={`${representative.id}-${item.city}`}>
+                                  <span className="font-semibold">{item.nights}N</span>{" "}
+                                  {item.city}
+                                  {index < representative.citySplit.length - 1 ? " · " : ""}
+                                </span>
+                              ))}
+                            </div>
+
+                            <div className="mt-3 border-t border-slate-200" />
+
+                            <div className="mt-3 grid grid-cols-2 gap-x-5 gap-y-1.5 text-base text-slate-700">
+                              <CompactPointer
+                                text={
+                                  <>
+                                    <strong>{representative.durationNights}N</strong> /{" "}
+                                    <strong>{representative.durationDays}D</strong>
+                                  </>
+                                }
+                              />
+                              <CompactPointer text={<strong>{representative.hotelCategory}</strong>} />
+                              <CompactPointer
+                                text={
+                                  <>
+                                    <strong>{representative.activitiesCount}</strong> activities
+                                  </>
+                                }
+                              />
+                              <CompactPointer
+                                text={
+                                  hasWithFlight && hasWithoutFlight
+                                    ? "With / without flight options"
+                                    : hasWithFlight
+                                    ? "With flight available"
+                                    : "Without flight available"
+                                }
+                              />
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2.5 text-[15px]">
+                              <IncludeTick text={representative.transferType} />
+                              <IncludeTick text={representative.mealsLabel} />
+                              <IncludeTick text={`${representative.hotelCategory} stay`} />
+                              <IncludeTick text="Customization available next" />
+                            </div>
+
+                            <div className="mt-4 rounded-[20px] bg-[#e5e7eb] px-4 py-3.5">
+                              <div className="flex items-end justify-between gap-3">
+                                <div>
+                                  <p className="text-sm text-slate-500">Trip Total</p>
+                                  <p className="mt-1 text-2xl font-semibold leading-none text-slate-950">
+                                    {formatINR(examplePrice.totalPrice)}
+                                  </p>
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                  Per person shown above
                                 </p>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="mt-5 grid gap-2 sm:grid-cols-2">
                             <button
                               type="button"
-                              onClick={() => handleOpenDetail(pkg.id)}
-                              className="rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                              onClick={() => handleOpenDetail(representative.id)}
+                              className="mt-4 w-full rounded-full border border-slate-200 bg-white px-4 py-3 text-base font-semibold text-slate-700 transition hover:bg-slate-50"
                             >
                               View itinerary
                             </button>
-                            <button
-  type="button"
-  onClick={() => handleSelectPackage(pkg.id)}
-  className={`rounded-full px-4 py-3 text-sm font-semibold transition ${
-    isSelected
-      ? "bg-orange-500 text-white shadow-[0_12px_28px_rgba(249,115,22,0.24)] hover:bg-orange-600"
-      : "bg-slate-950 text-white hover:bg-slate-800"
-  }`}
->
-  {isSelected ? "Selected package" : "Choose package"}
-</button>
-                          </div>
 
-                          <button
-  type="button"
-  onClick={() => handleCustomizePackage(pkg.id)}
-  className={`mt-2 w-full rounded-full border px-4 py-3 text-sm font-semibold transition ${
-    isSelected
-      ? "border-orange-300 bg-white text-orange-700 hover:bg-orange-50"
-      : "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
-  }`}
->
-  Customize this package
-</button>
-                        </div>
-                      </article>
-  );
-})}
+                            <div className="mt-3 grid grid-cols-2 gap-3">
+                              <button
+                                type="button"
+                                onClick={() => openFlightChoice(representative.packageFamilyId)}
+                                className="rounded-full bg-slate-950 px-4 py-3.5 text-base font-semibold text-white transition hover:bg-slate-800"
+                              >
+                                Choose package
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleCustomizePackage(representative.id)}
+                                className="rounded-full border border-orange-200 bg-orange-50 px-4 py-3.5 text-base font-semibold text-orange-700 transition hover:bg-orange-100"
+                              >
+                                Customize
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
                   </div>
 
-                  {packageCards.length === 0 ? (
+                  {familyCards.length === 0 ? (
                     <div className="mt-6 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
-                      No packages match the current filters. Adjust hotel class, trip length, or
-                      budget band.
+                      No packages match the current filters. Adjust hotel class, trip length,
+                      budget band, or flight filter.
                     </div>
                   ) : null}
                 </section>
@@ -703,12 +801,6 @@ export function TripBuilderShell() {
                           .map((item) => `${item.nights}N ${item.city}`)
                           .join(" · ")}
                       </p>
-                      <p className="mt-4 text-3xl font-semibold text-slate-950">
-                        {formatINR(selectedPackage.pricing.totalPrice)}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {formatINR(selectedPackage.pricing.pricePerPerson)} / person
-                      </p>
                     </div>
                   ) : (
                     <div className="mt-4 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
@@ -728,14 +820,6 @@ export function TripBuilderShell() {
                   >
                     Continue booking
                   </button>
-                </div>
-
-                <div className="rounded-[30px] border border-slate-200 bg-[linear-gradient(135deg,#111827_0%,#1f2937_42%,#f97316_160%)] p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.12)]">
-                  <p className="text-sm font-semibold text-orange-200">Need a different city split?</p>
-                  <p className="mt-2 text-sm leading-7 text-white/80">
-                    Standard packages stay fixed. The moment the customer wants to change nights,
-                    cities, hotels, transfers, or day items, move them into Personal Custom.
-                  </p>
                 </div>
               </aside>
             </div>
@@ -773,7 +857,7 @@ export function TripBuilderShell() {
       </main>
 
       {mobileSearchOpen ? (
-  <div className="fixed inset-0 z-[90] overflow-x-hidden bg-white lg:hidden">
+        <div className="fixed inset-0 z-[90] overflow-x-hidden bg-white lg:hidden">
           <div className="flex h-full flex-col">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
               <div>
@@ -795,49 +879,43 @@ export function TripBuilderShell() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-4">
-  <div className="space-y-4">
-    <MobileSelectField
-      label="From"
-      value={departureCityId}
-      onChange={setDepartureCityId}
-      options={departureCities.map((item) => ({
-        value: item.id,
-        label: `${item.city} · ${item.airportCode}`,
-        description: item.airport,
-      }))}
-    />
+              <div className="space-y-4">
+                <MobileSelectField
+                  label="From"
+                  value={departureCityId}
+                  onChange={setDepartureCityId}
+                  options={departureCities.map((item) => ({
+                    value: item.id,
+                    label: `${item.city} · ${item.airportCode}`,
+                    description: item.airport,
+                  }))}
+                />
 
-    <MobileSelectField
-      label="To"
-      value={destinationCity}
-      onChange={setDestinationCity}
-      options={[
-        {
-          value: "Bangkok",
-          label: "Bangkok",
-          description: "Thailand",
-        },
-      ]}
-    />
+                <MobileSelectField
+                  label="To"
+                  value={destinationCity}
+                  onChange={setDestinationCity}
+                  options={[{ value: "Bangkok", label: "Bangkok", description: "Thailand" }]}
+                />
 
-    <MobileDateField
-      label="Departure"
-      value={departureDate}
-      onChange={setDepartureDate}
-      min={getTomorrowISODate()}
-      helper="Only future departures"
-    />
+                <MobileDateField
+                  label="Departure"
+                  value={departureDate}
+                  onChange={setDepartureDate}
+                  min={getTomorrowISODate()}
+                  helper="Only future departures"
+                />
 
-    <MobileGuestsField
-      adults={adults}
-      children={children}
-      rooms={rooms}
-      setAdults={setAdults}
-      setChildren={setChildren}
-      setRooms={setRooms}
-    />
-  </div>
-</div>
+                <MobileGuestsField
+                  adults={adults}
+                  children={children}
+                  rooms={rooms}
+                  setAdults={setAdults}
+                  setChildren={setChildren}
+                  setRooms={setRooms}
+                />
+              </div>
+            </div>
 
             <div className="border-t border-slate-200 px-4 py-4">
               <button
@@ -853,7 +931,7 @@ export function TripBuilderShell() {
       ) : null}
 
       {mobileFiltersOpen ? (
-  <div className="fixed inset-0 z-[90] overflow-x-hidden bg-white lg:hidden">
+        <div className="fixed inset-0 z-[90] overflow-x-hidden bg-white lg:hidden">
           <div className="flex h-full flex-col">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
               <div>
@@ -874,46 +952,57 @@ export function TripBuilderShell() {
               </button>
             </div>
 
-           <div className="flex-1 overflow-y-auto px-4 py-4">
-  <div className="space-y-4">
-    <MobileFilterField
-      label="Hotel Class"
-      value={hotelFilter}
-      onChange={(value) =>
-        setHotelFilter(value as "all" | "3 Star" | "4 Star" | "5 Star")
-      }
-      options={[
-        { value: "all", label: "All hotels" },
-        { value: "3 Star", label: "3 Star" },
-        { value: "4 Star", label: "4 Star" },
-        { value: "5 Star", label: "5 Star" },
-      ]}
-    />
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              <div className="space-y-4">
+                <MobileFilterField
+                  label="Hotel Class"
+                  value={hotelFilter}
+                  onChange={(value) => setHotelFilter(value as HotelFilter)}
+                  options={[
+                    { value: "all", label: "All hotels" },
+                    { value: "3 Star", label: "3 Star" },
+                    { value: "4 Star", label: "4 Star" },
+                  ]}
+                />
 
-    <MobileFilterField
-      label="Trip Length"
-      value={durationFilter}
-      onChange={(value) => setDurationFilter(value as DurationFilter)}
-      options={[
-        { value: "all", label: "Any length" },
-        { value: "4-5", label: "4N to 5N" },
-        { value: "6-7", label: "6N to 7N" },
-      ]}
-    />
+                <MobileFilterField
+                  label="Trip Length"
+                  value={durationFilter}
+                  onChange={(value) => setDurationFilter(value as DurationFilter)}
+                  options={[
+                    { value: "all", label: "Any length" },
+                    { value: "4-5", label: "4N to 5N" },
+                    { value: "6-7", label: "6N to 7N" },
+                    { value: "8-9", label: "8N to 9N" },
+                    { value: "10-11", label: "10N to 11N" },
+                  ]}
+                />
 
-    <MobileFilterField
-      label="Budget Band"
-      value={priceFilter}
-      onChange={(value) => setPriceFilter(value as PriceFilter)}
-      options={[
-        { value: "all", label: "All budgets" },
-        { value: "upto-40", label: "Up to ₹40K" },
-        { value: "40-55", label: "₹40K to ₹55K" },
-        { value: "55-plus", label: "₹55K+" },
-      ]}
-    />
-  </div>
-</div>
+                <MobileFilterField
+                  label="Budget Band"
+                  value={priceFilter}
+                  onChange={(value) => setPriceFilter(value as PriceFilter)}
+                  options={[
+                    { value: "all", label: "All budgets" },
+                    { value: "upto-40", label: "Up to ₹40K" },
+                    { value: "40-55", label: "₹40K to ₹55K" },
+                    { value: "55-75", label: "₹55K to ₹75K" },
+                    { value: "75-plus", label: "₹75K+" },
+                  ]}
+                />
+
+                <MobileFilterField
+                  label="Flight"
+                  value={flightFilter}
+                  onChange={(value) => setFlightFilter(value as FlightFilter)}
+                  options={[
+                    { value: "all", label: "All" },
+                    { value: "with-flight", label: "With Flight" },
+                    { value: "without-flight", label: "Without Flight" },
+                  ]}
+                />
+              </div>
+            </div>
 
             <div className="grid gap-3 border-t border-slate-200 px-4 py-4">
               <button
@@ -929,6 +1018,70 @@ export function TripBuilderShell() {
                 className="w-full rounded-full bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white"
               >
                 Apply filters
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {flightModalFamily ? (
+        <div className="fixed inset-0 z-[95] bg-slate-950/55 px-4 py-8 backdrop-blur-sm">
+          <div className="mx-auto max-w-2xl rounded-[32px] bg-white p-5 shadow-2xl sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-600">
+                  Flight Option
+                </p>
+                <h3 className="mt-2 text-2xl font-semibold text-slate-950">
+                  {flightModalFamily.representative.title}
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  Choose flight mode once. This is added to billing as{" "}
+                  <span className="font-semibold text-slate-950">1</span> or{" "}
+                  <span className="font-semibold text-slate-950">0</span>.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setFlightModalFamilyId(null)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => handleChooseFlightOption(1)}
+                className="rounded-[24px] border border-sky-200 bg-sky-50 p-5 text-left transition hover:border-sky-300 hover:bg-sky-100"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-sky-700">
+                    <Plane className="h-3.5 w-3.5" />
+                    With Flight
+                  </div>
+                  <div className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white">
+                    1
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleChooseFlightOption(0)}
+                className="rounded-[24px] border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-slate-300 hover:bg-slate-100"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                    <Plane className="h-3.5 w-3.5" />
+                    Without Flight
+                  </div>
+                  <div className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white">
+                    0
+                  </div>
+                </div>
               </button>
             </div>
           </div>
@@ -954,7 +1107,7 @@ export function TripBuilderShell() {
               </div>
               <button
                 type="button"
-                onClick={handleCloseDetail}
+                onClick={() => setDetailPackageId(null)}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-600"
               >
                 <X className="h-5 w-5" />
@@ -963,34 +1116,25 @@ export function TripBuilderShell() {
 
             <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_320px]">
               <div className="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
-                <div
-  className={`rounded-[22px] bg-gradient-to-br ${detailPackage.accentFrom} ${detailPackage.accentTo} p-4 sm:rounded-[28px] sm:p-6`}
->
-                  <p className="text-sm font-semibold text-slate-700">{detailPackage.subtitle}</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {detailPackage.citySplit.map((item) => (
-                      <span
-                        key={`${detailPackage.id}-${item.city}`}
-                        className="rounded-full bg-white/85 px-4 py-2 text-sm font-semibold text-slate-900"
-                      >
-                        {item.nights}N {item.city}
-                      </span>
-                    ))}
-                  </div>
+                <div className="overflow-hidden rounded-[28px]">
+                  <img
+                    src={detailPackage.image}
+                    alt={detailPackage.title}
+                    className="h-64 w-full object-cover"
+                  />
                 </div>
 
                 <div className="mt-6 grid gap-4 sm:grid-cols-3">
                   <DetailInfoCard label="Hotel" value={detailPackage.hotelCategory} />
                   <DetailInfoCard label="Transfers" value={detailPackage.transferType} />
-                  <DetailInfoCard label="Meals" value={detailPackage.mealsLabel} />
+                  <DetailInfoCard
+                    label="Flight Mode"
+                    value={detailPackage.includedFlights ? "With Flight" : "Without Flight"}
+                  />
                 </div>
 
                 <div className="mt-6">
                   <p className="text-lg font-semibold text-slate-950">Day-wise itinerary</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    This is the standard plan. Editing any day should move the trip into Personal
-                    Custom.
-                  </p>
 
                   <div className="mt-5 space-y-4">
                     {detailPackage.dayPlan.map((item) => (
@@ -1024,13 +1168,13 @@ export function TripBuilderShell() {
                         </div>
 
                         <div className="mt-4 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-                          {item.transfer ? <InfoBullet text={item.transfer} /> : null}
-                          {item.hotel ? <InfoBullet text={item.hotel} /> : null}
+                          {item.transfer ? <PointRow text={item.transfer} /> : null}
+                          {item.hotel ? <PointRow text={item.hotel} /> : null}
                           {item.activities?.map((activity) => (
-                            <InfoBullet key={activity} text={activity} />
+                            <PointRow key={activity} text={activity} />
                           ))}
                           {item.meals?.map((meal) => (
-                            <InfoBullet key={meal} text={meal} />
+                            <PointRow key={meal} text={meal} />
                           ))}
                         </div>
                       </div>
@@ -1040,75 +1184,105 @@ export function TripBuilderShell() {
               </div>
 
               <aside className="border-t border-slate-200 bg-slate-50 px-4 py-4 lg:border-l lg:border-t-0 lg:px-5 lg:py-5">
-  <div className="rounded-[20px] border border-slate-200 bg-white p-4 sm:rounded-[24px] sm:p-5">
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
-          Current estimate
-        </p>
-        <p className="mt-2 text-3xl font-semibold leading-none text-slate-950">
-          {formatINR(detailPackage.pricing.totalPrice)}
-        </p>
-        <p className="mt-2 text-sm text-slate-500">
-          {formatINR(detailPackage.pricing.pricePerPerson)} / person
-        </p>
+                <div className="rounded-[20px] border border-slate-200 bg-white p-4 sm:rounded-[24px] sm:p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
+                    Current estimate
+                  </p>
+
+                  <p className="mt-2 text-3xl font-semibold leading-none text-slate-950">
+                    {formatINR(
+                      calculatePackagePrice(
+                        detailPackage,
+                        adults,
+                        children,
+                        rooms,
+                        detailPackage.includedFlights ? 1 : 0
+                      ).totalPrice
+                    )}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-500">
+                    {formatINR(detailPackage.basePricePerPerson)} / person
+                  </p>
+
+                  <div className="mt-3 rounded-full bg-slate-50 px-4 py-2 text-xs font-medium text-slate-600">
+                    {formatLongDate(departureDate)} · {totalTravellers} guest
+                    {totalTravellers > 1 ? "s" : ""} · {rooms} room
+                    {rooms > 1 ? "s" : ""}
+                  </div>
+
+                  <div className="mt-4 grid gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDetailPackageId(null)}
+                      className="rounded-full bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCustomizePackage(detailPackage.id)}
+                      className="rounded-full border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
+                    >
+                      Customize
+                    </button>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
+        <div className="mx-auto max-w-7xl rounded-[22px] border border-slate-200 bg-white px-4 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.08)]">
+          {selectedPackage ? (
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-slate-950">
+                  {selectedPackage.title}
+                </p>
+                <p className="truncate text-xs text-slate-500">
+                  {selectedPackage.citySplit
+                    .map((item) => `${item.nights}N ${item.city}`)
+                    .join(" · ")}
+                </p>
+                <p className="mt-1 text-base font-semibold text-slate-950">
+                  {selectedPackageSummaryTotal != null
+                    ? formatINR(selectedPackageSummaryTotal)
+                    : "—"}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleContinueBooking}
+                className="shrink-0 rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
+              >
+                Continue
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-950">
+                  {familyCards.length} packages available
+                </p>
+                <p className="text-xs text-slate-500">
+                  Select a package to continue
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => window.scrollTo({ top: 900, behavior: "smooth" })}
+                className="shrink-0 rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
+              >
+                View packages
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-
-    <div className="mt-3 rounded-full bg-slate-50 px-4 py-2 text-xs font-medium text-slate-600">
-      {formatLongDate(departureDate)} · {totalTravellers} guest
-      {totalTravellers > 1 ? "s" : ""} · {rooms} room
-      {rooms > 1 ? "s" : ""}
-    </div>
-
-    <div className="mt-4 grid grid-cols-2 gap-2">
-      <button
-        type="button"
-        onClick={() => {
-          handleSelectPackage(detailPackage.id);
-          handleCloseDetail();
-        }}
-        className="rounded-full bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-      >
-        Choose
-      </button>
-      <button
-        type="button"
-        onClick={() => handleCustomizePackage(detailPackage.id)}
-        className="rounded-full border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
-      >
-        Customize
-      </button>
-    </div>
-  </div>
-</aside>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {selectedPackage ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-950">
-                {selectedPackage.title}
-              </p>
-              <p className="text-sm text-slate-500">
-                {formatINR(selectedPackage.pricing.totalPrice)}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleContinueBooking}
-              className="shrink-0 rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
-            >
-              Continue
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {!mobileSearchOpen && !mobileFiltersOpen ? <PublicFooter /> : null}
     </div>
@@ -1268,37 +1442,6 @@ function CounterMini({
   );
 }
 
-function FilterCard({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <label className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3">
-      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-        {label}
-      </span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none bg-transparent text-sm font-semibold text-slate-950 outline-none"
-      >
-        {options.map((item) => (
-          <option key={item.value} value={item.value}>
-            {item.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
 function ModeCard({
   active,
   title,
@@ -1316,36 +1459,53 @@ function ModeCard({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-[22px] border p-4 text-left transition sm:rounded-[30px] sm:p-5 ${
+      className={`rounded-[20px] border px-4 py-3.5 text-left transition sm:rounded-[24px] sm:px-5 sm:py-4 ${
         active
-          ? "border-orange-200 bg-orange-50 shadow-[0_12px_34px_rgba(249,115,22,0.10)]"
+          ? "border-orange-200 bg-orange-50 shadow-[0_8px_20px_rgba(249,115,22,0.08)]"
           : "border-slate-200 bg-white hover:border-slate-300"
       }`}
     >
-      <div className="flex items-start gap-3 sm:gap-4">
-        <div className="rounded-full bg-slate-100 p-3 text-slate-700">{icon}</div>
-        <div>
-          <p className="text-base font-semibold text-slate-950 sm:text-lg">{title}</p>
-          <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
+      <div className="flex items-center gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+          {icon}
+        </div>
+
+        <div className="min-w-0">
+          <p className="text-lg font-semibold leading-none text-slate-950">
+            {title}
+          </p>
+          <p className="mt-2 text-sm leading-none text-slate-600">
+            {description}
+          </p>
         </div>
       </div>
     </button>
   );
 }
 
-function FactPill({ label }: { label: string }) {
+function PointRow({ text }: { text: string }) {
   return (
-    <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-medium text-slate-700">
-      {label}
+    <div className="flex min-w-0 items-start gap-2 rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
+      <span className="min-w-0 break-words">{text}</span>
     </div>
   );
 }
 
-function InfoBullet({ text }: { text: string }) {
+function CompactPointer({ text }: { text: ReactNode }) {
   return (
-    <div className="flex min-w-0 items-start gap-2">
-      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
-      <span className="min-w-0 break-words">{text}</span>
+    <div className="flex min-w-0 items-start gap-3">
+      <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-orange-500" />
+      <span className="min-w-0 break-words leading-6">{text}</span>
+    </div>
+  );
+}
+
+function IncludeTick({ text }: { text: string }) {
+  return (
+    <div className="inline-flex min-w-0 items-center gap-2.5">
+      <Check className="h-4.5 w-4.5 shrink-0 text-emerald-700" />
+      <span className="min-w-0 break-words leading-5 text-emerald-700">{text}</span>
     </div>
   );
 }

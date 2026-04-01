@@ -1,7 +1,7 @@
-import { create } from "zustand";
-import type { TripDayType } from "@/lib/helpers/recommendation";
+"use client";
 
-export type TripBuilderMode = "standard" | "ai" | "custom";
+import { create } from "zustand";
+import type { DayPlanItem, TripSegment } from "@/lib/mock/bangkok-builder-data";
 
 export type ChatMessage = {
   id: string;
@@ -9,36 +9,22 @@ export type ChatMessage = {
   text: string;
 };
 
-export type TripSegment = {
-  id: string;
-  city: string;
-  destinationId: string;
-  checkIn: string;
-  checkOut: string;
-};
-
-export type DayPlan = {
-  dayNumber: number;
-  label: string;
-  dayType: TripDayType;
-  allowedTimeSlots: Array<"morning" | "afternoon" | "evening" | "night">;
-  notes: string[];
-};
-
 type PackageSelection = {
   selectedPackageId: string;
   selectedPackageTitle: string;
   selectedPackagePrice: number;
+  selectedFlightMode?: 0 | 1;
+  selectedFlightLabel?: string;
 };
 
 type TripBuilderState = {
-  selectedMode: TripBuilderMode;
+  selectedMode: "standard" | "ai" | "custom";
 
   destination: string;
   destinationId: string;
   segments: TripSegment[];
-  arrivalTimeSlot: "early-morning" | "morning" | "afternoon" | "evening" | "night";
-  departureTimeSlot: "morning" | "afternoon" | "evening" | "night";
+  arrivalTimeSlot: string;
+  departureTimeSlot: string;
 
   travelDates: string;
   nights: string;
@@ -53,13 +39,16 @@ type TripBuilderState = {
   priority: string;
   specialPreferences: string[];
   specialRequest: string;
-  aiPrompt: string;
 
+  aiPrompt: string;
   aiChatMessages: ChatMessage[];
 
   selectedPackageId: string;
   selectedPackageTitle: string;
   selectedPackagePrice: number;
+
+  selectedFlightMode: 0 | 1;
+  selectedFlightLabel: string;
 
   selectedHotelId: string;
   hotelCategory: "3 Star" | "4 Star" | "5 Star";
@@ -75,38 +64,57 @@ type TripBuilderState = {
   selectedAddOns: string[];
 
   roomPreference: string;
-
   serviceFee: number;
   bookingId: string;
 
-  dayPlans: DayPlan[];
+  dayPlans: DayPlanItem[];
 
+  estimatedFlightTotal: number;
   estimatedHotelTotal: number;
   estimatedTransferTotal: number;
   estimatedSightseeingTotal: number;
   estimatedMealsTotal: number;
   estimatedGrandTotal: number;
 
-  setTripDetails: (payload: Partial<TripBuilderState>) => void;
-  setSelectedMode: (mode: TripBuilderMode) => void;
+  setTripDetails: (
+    payload: Partial<
+      Pick<
+        TripBuilderState,
+        | "selectedMode"
+        | "destination"
+        | "destinationId"
+        | "segments"
+        | "travelDates"
+        | "nights"
+        | "budget"
+        | "travelStyle"
+        | "travellingWith"
+        | "priority"
+        | "serviceFee"
+      >
+    >
+  ) => void;
+
+  setSelectedMode: (value: "standard" | "ai" | "custom") => void;
   setBudget: (value: string) => void;
   setMood: (value: string) => void;
   setTravelStyle: (value: string) => void;
   setTravellingWith: (value: string) => void;
   setPriority: (value: string) => void;
   setSpecialRequest: (value: string) => void;
-  setSegments: (segments: TripSegment[]) => void;
-  addSegment: () => void;
-  updateSegment: (id: string, values: Partial<TripSegment>) => void;
-  removeSegment: (id: string) => void;
-  setArrivalTimeSlot: (
-    value: "early-morning" | "morning" | "afternoon" | "evening" | "night"
-  ) => void;
-  setDepartureTimeSlot: (
-    value: "morning" | "afternoon" | "evening" | "night"
-  ) => void;
 
-  setTravelers: (payload: { adults?: number; children?: number; rooms?: number }) => void;
+  setSegments: (segments: TripSegment[]) => void;
+  addSegment: (segment: TripSegment) => void;
+  updateSegment: (segmentId: string, payload: Partial<TripSegment>) => void;
+  removeSegment: (segmentId: string) => void;
+
+  setArrivalTimeSlot: (value: string) => void;
+  setDepartureTimeSlot: (value: string) => void;
+  setTravelers: (payload: {
+    adults?: number;
+    children?: number;
+    rooms?: number;
+  }) => void;
 
   togglePreference: (value: string) => void;
   setAiPrompt: (value: string) => void;
@@ -114,6 +122,8 @@ type TripBuilderState = {
   resetAiChat: () => void;
 
   selectPackage: (payload: PackageSelection) => void;
+  setFlightChoice: (value: 0 | 1, label?: string) => void;
+
   setSelectedHotelId: (value: string) => void;
   setHotelCategory: (value: "3 Star" | "4 Star" | "5 Star") => void;
 
@@ -128,14 +138,17 @@ type TripBuilderState = {
   toggleAddOn: (value: string) => void;
 
   setRoomPreference: (value: string) => void;
-  setDayPlans: (plans: DayPlan[]) => void;
+  setDayPlans: (plans: DayPlanItem[]) => void;
+
   setTotals: (payload: {
+    estimatedFlightTotal?: number;
     estimatedHotelTotal?: number;
     estimatedTransferTotal?: number;
     estimatedSightseeingTotal?: number;
     estimatedMealsTotal?: number;
     estimatedGrandTotal?: number;
   }) => void;
+
   setBookingId: (value: string) => void;
   resetTrip: () => void;
 };
@@ -149,7 +162,7 @@ const initialAiMessages: ChatMessage[] = [
   {
     id: "ai-2",
     role: "assistant",
-    text: "You can mention things like family trip, nightlife, shopping, comfort, luxury, or a relaxed pace.",
+    text: "You can mention family trip, nightlife, shopping, comfort, luxury, or a relaxed pace.",
   },
 ];
 
@@ -175,6 +188,7 @@ const initialState: Omit<
   | "addAiChatMessage"
   | "resetAiChat"
   | "selectPackage"
+  | "setFlightChoice"
   | "setSelectedHotelId"
   | "setHotelCategory"
   | "setSelectedArrivalTransferId"
@@ -220,14 +234,17 @@ const initialState: Omit<
   priority: "Better hotel",
   specialPreferences: ["Private transfers"],
   specialRequest: "",
+
   aiPrompt:
     "I want a premium Bangkok trip with a clean hotel, private transfers, and a balanced mix of shopping, nightlife, and sightseeing.",
-
   aiChatMessages: initialAiMessages,
 
-  selectedPackageId: "pkg-2",
-  selectedPackageTitle: "Bangkok Premium Getaway",
-  selectedPackagePrice: 39500,
+  selectedPackageId: "",
+  selectedPackageTitle: "",
+  selectedPackagePrice: 0,
+
+  selectedFlightMode: 0,
+  selectedFlightLabel: "Without Flight",
 
   selectedHotelId: "",
   hotelCategory: "4 Star",
@@ -240,15 +257,15 @@ const initialState: Omit<
   selectedSightseeingIds: [],
   selectedMealIds: [],
   selectedExtras: ["Breakfast included"],
-  selectedAddOns: ["Private airport pickup", "Safari World"],
+  selectedAddOns: [],
 
   roomPreference: "Deluxe Room",
-
   serviceFee: 3000,
   bookingId: "ET365-DEMO-001",
 
   dayPlans: [],
 
+  estimatedFlightTotal: 0,
   estimatedHotelTotal: 0,
   estimatedTransferTotal: 0,
   estimatedSightseeingTotal: 0,
@@ -256,228 +273,122 @@ const initialState: Omit<
   estimatedGrandTotal: 0,
 };
 
+function toggleInArray(list: string[], value: string) {
+  return list.includes(value)
+    ? list.filter((item) => item !== value)
+    : [...list, value];
+}
+
 export const useTripBuilderStore = create<TripBuilderState>((set) => ({
   ...initialState,
 
-  setTripDetails: (payload) =>
+  setTripDetails: (payload) => set((state) => ({ ...state, ...payload })),
+
+  setSelectedMode: (value) => set({ selectedMode: value }),
+  setBudget: (value) => set({ budget: value }),
+  setMood: (value) => set({ mood: value }),
+  setTravelStyle: (value) => set({ travelStyle: value }),
+  setTravellingWith: (value) => set({ travellingWith: value }),
+  setPriority: (value) => set({ priority: value }),
+  setSpecialRequest: (value) => set({ specialRequest: value }),
+
+  setSegments: (segments) => set({ segments }),
+  addSegment: (segment) =>
     set((state) => ({
-      ...state,
-      ...payload,
+      segments: [...state.segments, segment],
     })),
-
-  setSelectedMode: (mode) =>
-    set(() => ({
-      selectedMode: mode,
-    })),
-
-  setBudget: (value) =>
-    set(() => ({
-      budget: value,
-    })),
-
-  setMood: (value) =>
-    set(() => ({
-      mood: value,
-    })),
-
-  setTravelStyle: (value) =>
-    set(() => ({
-      travelStyle: value,
-    })),
-
-  setTravellingWith: (value) =>
-    set(() => ({
-      travellingWith: value,
-    })),
-
-  setPriority: (value) =>
-    set(() => ({
-      priority: value,
-    })),
-
-  setSpecialRequest: (value) =>
-    set(() => ({
-      specialRequest: value,
-    })),
-
-  setSegments: (segments) =>
-    set(() => ({
-      segments,
-    })),
-
-  addSegment: () =>
+  updateSegment: (segmentId, payload) =>
     set((state) => ({
-      segments: [
-        ...state.segments,
-        {
-          id: `segment-${Date.now()}`,
-          city: "",
-          destinationId: "",
-          checkIn: "",
-          checkOut: "",
-        },
-      ],
+      segments: state.segments.map((segment) =>
+        segment.id === segmentId ? { ...segment, ...payload } : segment
+      ),
     })),
-
-  updateSegment: (id, values) =>
+  removeSegment: (segmentId) =>
     set((state) => ({
-      segments: state.segments.map((segment) => {
-        if (segment.id !== id) return segment;
-
-        const next = { ...segment, ...values };
-
-        if (
-          next.checkIn &&
-          next.checkOut &&
-          new Date(next.checkOut).getTime() <= new Date(next.checkIn).getTime()
-        ) {
-          next.checkOut = "";
-        }
-
-        return next;
-      }),
+      segments: state.segments.filter((segment) => segment.id !== segmentId),
     })),
 
-  removeSegment: (id) =>
+  setArrivalTimeSlot: (value) => set({ arrivalTimeSlot: value }),
+  setDepartureTimeSlot: (value) => set({ departureTimeSlot: value }),
+  setTravelers: (payload) =>
     set((state) => ({
-      segments:
-        state.segments.length <= 1
-          ? state.segments
-          : state.segments.filter((segment) => segment.id !== id),
-    })),
-
-  setArrivalTimeSlot: (value) =>
-    set(() => ({
-      arrivalTimeSlot: value,
-    })),
-
-  setDepartureTimeSlot: (value) =>
-    set(() => ({
-      departureTimeSlot: value,
-    })),
-
-  setTravelers: ({ adults, children, rooms }) =>
-    set((state) => ({
-      adults: adults ?? state.adults,
-      children: children ?? state.children,
-      rooms: rooms ?? state.rooms,
+      adults: payload.adults ?? state.adults,
+      children: payload.children ?? state.children,
+      rooms: payload.rooms ?? state.rooms,
     })),
 
   togglePreference: (value) =>
     set((state) => ({
-      specialPreferences: state.specialPreferences.includes(value)
-        ? state.specialPreferences.filter((item) => item !== value)
-        : [...state.specialPreferences, value],
+      specialPreferences: toggleInArray(state.specialPreferences, value),
     })),
-
-  setAiPrompt: (value) =>
-    set(() => ({
-      aiPrompt: value,
-    })),
-
+  setAiPrompt: (value) => set({ aiPrompt: value }),
   addAiChatMessage: (message) =>
     set((state) => ({
       aiChatMessages: [...state.aiChatMessages, message],
     })),
+  resetAiChat: () => set({ aiChatMessages: initialAiMessages }),
 
-  resetAiChat: () =>
-    set(() => ({
-      aiChatMessages: initialAiMessages,
-    })),
+  selectPackage: (payload) =>
+    set({
+      selectedPackageId: payload.selectedPackageId,
+      selectedPackageTitle: payload.selectedPackageTitle,
+      selectedPackagePrice: payload.selectedPackagePrice,
+      selectedFlightMode: payload.selectedFlightMode ?? 0,
+      selectedFlightLabel:
+        payload.selectedFlightLabel ??
+        (payload.selectedFlightMode === 1 ? "With Flight" : "Without Flight"),
+    }),
 
-  selectPackage: ({ selectedPackageId, selectedPackageTitle, selectedPackagePrice }) =>
-    set(() => ({
-      selectedPackageId,
-      selectedPackageTitle,
-      selectedPackagePrice,
-    })),
+  setFlightChoice: (value, label) =>
+    set({
+      selectedFlightMode: value,
+      selectedFlightLabel: label ?? (value === 1 ? "With Flight" : "Without Flight"),
+    }),
 
-  setSelectedHotelId: (value) =>
-    set(() => ({
-      selectedHotelId: value,
-    })),
+  setSelectedHotelId: (value) => set({ selectedHotelId: value }),
+  setHotelCategory: (value) => set({ hotelCategory: value }),
 
-  setHotelCategory: (value) =>
-    set(() => ({
-      hotelCategory: value,
-    })),
-
-  setSelectedArrivalTransferId: (value) =>
-    set(() => ({
-      selectedArrivalTransferId: value,
-    })),
-
-  setSelectedDepartureTransferId: (value) =>
-    set(() => ({
-      selectedDepartureTransferId: value,
-    })),
-
-  setSelectedLocalTransferId: (value) =>
-    set(() => ({
-      selectedLocalTransferId: value,
-    })),
-
-  setTransferType: (value) =>
-    set(() => ({
-      transferType: value,
-    })),
+  setSelectedArrivalTransferId: (value) => set({ selectedArrivalTransferId: value }),
+  setSelectedDepartureTransferId: (value) => set({ selectedDepartureTransferId: value }),
+  setSelectedLocalTransferId: (value) => set({ selectedLocalTransferId: value }),
+  setTransferType: (value) => set({ transferType: value }),
 
   toggleSightseeing: (value) =>
     set((state) => ({
-      selectedSightseeingIds: state.selectedSightseeingIds.includes(value)
-        ? state.selectedSightseeingIds.filter((item) => item !== value)
-        : [...state.selectedSightseeingIds, value],
+      selectedSightseeingIds: toggleInArray(state.selectedSightseeingIds, value),
     })),
-
   toggleMeal: (value) =>
     set((state) => ({
-      selectedMealIds: state.selectedMealIds.includes(value)
-        ? state.selectedMealIds.filter((item) => item !== value)
-        : [...state.selectedMealIds, value],
+      selectedMealIds: toggleInArray(state.selectedMealIds, value),
     })),
-
   toggleExtra: (value) =>
     set((state) => ({
-      selectedExtras: state.selectedExtras.includes(value)
-        ? state.selectedExtras.filter((item) => item !== value)
-        : [...state.selectedExtras, value],
+      selectedExtras: toggleInArray(state.selectedExtras, value),
     })),
-
   toggleAddOn: (value) =>
     set((state) => ({
-      selectedAddOns: state.selectedAddOns.includes(value)
-        ? state.selectedAddOns.filter((item) => item !== value)
-        : [...state.selectedAddOns, value],
+      selectedAddOns: toggleInArray(state.selectedAddOns, value),
     })),
 
-  setRoomPreference: (value) =>
-    set(() => ({
-      roomPreference: value,
-    })),
-
-  setDayPlans: (plans) =>
-    set(() => ({
-      dayPlans: plans,
-    })),
+  setRoomPreference: (value) => set({ roomPreference: value }),
+  setDayPlans: (plans) => set({ dayPlans: plans }),
 
   setTotals: (payload) =>
     set((state) => ({
+      estimatedFlightTotal: payload.estimatedFlightTotal ?? state.estimatedFlightTotal,
       estimatedHotelTotal: payload.estimatedHotelTotal ?? state.estimatedHotelTotal,
-      estimatedTransferTotal: payload.estimatedTransferTotal ?? state.estimatedTransferTotal,
+      estimatedTransferTotal:
+        payload.estimatedTransferTotal ?? state.estimatedTransferTotal,
       estimatedSightseeingTotal:
         payload.estimatedSightseeingTotal ?? state.estimatedSightseeingTotal,
       estimatedMealsTotal: payload.estimatedMealsTotal ?? state.estimatedMealsTotal,
       estimatedGrandTotal: payload.estimatedGrandTotal ?? state.estimatedGrandTotal,
     })),
 
-  setBookingId: (value) =>
-    set(() => ({
-      bookingId: value,
-    })),
+  setBookingId: (value) => set({ bookingId: value }),
 
-  resetTrip: () =>
-    set(() => ({
-      ...initialState,
-      aiChatMessages: initialAiMessages,
-    })),
+  resetTrip: () => ({
+    ...initialState,
+    bookingId: `ET365-DEMO-${Math.floor(100 + Math.random() * 900)}`,
+  }),
 }));
