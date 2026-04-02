@@ -394,17 +394,17 @@ export function TripBuilderShell() {
       priced.pricePerPerson <= 40000
         ? "Comfort"
         : priced.pricePerPerson <= 65000
-        ? "Premium"
-        : "Luxury";
+          ? "Premium"
+          : "Luxury";
 
     const derivedMood =
       activeCategory === "honeymoon"
         ? "Romantic"
         : activeCategory === "family"
-        ? "Family Fun"
-        : activeCategory === "beach"
-        ? "Relaxed"
-        : "Balanced";
+          ? "Family Fun"
+          : activeCategory === "beach"
+            ? "Relaxed"
+            : "Balanced";
 
     const derivedTravelStyle =
       pkg.hotelCategory === "4 Star" ? "Easy & Comfortable" : "Balanced";
@@ -501,7 +501,7 @@ export function TripBuilderShell() {
 
   function handleContinueBooking() {
     if (!selectedPackage) return;
-    router.push("/customize");
+    router.push("/review");
   }
 
   function clearFilters() {
@@ -547,7 +547,7 @@ export function TripBuilderShell() {
                 <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
                   AI Assist now works like a guided planning chat mockup with prompt chips and
                   Surprise Me recommendations. Flights are still asked only once when selecting a
-                  package.
+                  package, and the active funnel now moves into Review.
                 </p>
               </div>
             </div>
@@ -922,7 +922,7 @@ export function TripBuilderShell() {
                     </div>
                   ) : (
                     <div className="mt-4 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                      Choose a package to activate pricing and continue booking.
+                      Choose a package to activate pricing and continue to review.
                     </div>
                   )}
 
@@ -936,7 +936,7 @@ export function TripBuilderShell() {
                         : "cursor-not-allowed bg-slate-200 text-slate-500"
                     }`}
                   >
-                    Continue booking
+                    Continue to review
                   </button>
                 </div>
               </aside>
@@ -979,7 +979,7 @@ export function TripBuilderShell() {
                     onClick={handleContinueBooking}
                     className="mt-4 w-full rounded-full bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                   >
-                    Continue booking
+                    Continue to review
                   </button>
                 </div>
               </div>
@@ -1047,7 +1047,7 @@ export function TripBuilderShell() {
             setSelectedPackageId(detailPackage.id);
             syncPackageToStore(detailPackage, detailPackage.includedFlights);
             setDetailPackageId(null);
-            router.push("/results");
+            router.push("/review");
           }}
           onCustomize={() => handleCustomizePackage(detailPackage.id)}
         />

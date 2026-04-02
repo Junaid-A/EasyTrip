@@ -1,30 +1,109 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { PublicHeader } from "@/components/public/public-header";
 import { PublicFooter } from "@/components/public/public-footer";
 import { useTripBuilderStore } from "@/store/useTripBuilderStore";
 
+function formatINR(value: number) {
+  return `₹${value.toLocaleString("en-IN")}`;
+}
+
 export default function ReviewPage() {
-  const selectedPackageTitle = useTripBuilderStore((state) => state.selectedPackageTitle);
-  const selectedPackagePrice = useTripBuilderStore((state) => state.selectedPackagePrice);
+  const selectedMode = useTripBuilderStore((state) => state.selectedMode);
+  const destination = useTripBuilderStore((state) => state.destination);
+  const travelDates = useTripBuilderStore((state) => state.travelDates);
+  const nights = useTripBuilderStore((state) => state.nights);
   const adults = useTripBuilderStore((state) => state.adults);
   const children = useTripBuilderStore((state) => state.children);
+  const rooms = useTripBuilderStore((state) => state.rooms);
+  const budget = useTripBuilderStore((state) => state.budget);
+  const mood = useTripBuilderStore((state) => state.mood);
+  const travelStyle = useTripBuilderStore((state) => state.travelStyle);
+  const travellingWith = useTripBuilderStore((state) => state.travellingWith);
+  const priority = useTripBuilderStore((state) => state.priority);
+
+  const selectedPackageTitle = useTripBuilderStore((state) => state.selectedPackageTitle);
+  const selectedFlightLabel = useTripBuilderStore((state) => state.selectedFlightLabel);
+  const selectedExtras = useTripBuilderStore((state) => state.selectedExtras);
+  const selectedAddOns = useTripBuilderStore((state) => state.selectedAddOns);
+
   const roomPreference = useTripBuilderStore((state) => state.roomPreference);
   const serviceFee = useTripBuilderStore((state) => state.serviceFee);
   const bookingId = useTripBuilderStore((state) => state.bookingId);
-  const selectedExtras = useTripBuilderStore((state) => state.selectedExtras);
+
+  const dayPlans = useTripBuilderStore((state) => state.dayPlans);
+  const customTripDays = useTripBuilderStore((state) => state.customTripDays);
+
+  const selectedPackagePrice = useTripBuilderStore((state) => state.selectedPackagePrice);
+  const estimatedFlightTotal = useTripBuilderStore((state) => state.estimatedFlightTotal);
   const estimatedHotelTotal = useTripBuilderStore((state) => state.estimatedHotelTotal);
   const estimatedTransferTotal = useTripBuilderStore((state) => state.estimatedTransferTotal);
   const estimatedSightseeingTotal = useTripBuilderStore((state) => state.estimatedSightseeingTotal);
   const estimatedMealsTotal = useTripBuilderStore((state) => state.estimatedMealsTotal);
   const estimatedGrandTotal = useTripBuilderStore((state) => state.estimatedGrandTotal);
 
-  const fallbackExtrasTotal = selectedExtras.length * 900;
+  const modeLabel =
+    selectedMode === "ai"
+      ? "AI Assisted"
+      : selectedMode === "custom"
+        ? "Custom Trip"
+        : "Standard Package";
+
+  const fallbackExtrasTotal = selectedExtras.length * 900 + selectedAddOns.length * 1200;
+
   const finalPrice =
     estimatedGrandTotal > 0
       ? estimatedGrandTotal
-      : selectedPackagePrice + fallbackExtrasTotal + serviceFee;
+      : selectedPackagePrice +
+        estimatedFlightTotal +
+        estimatedHotelTotal +
+        estimatedTransferTotal +
+        estimatedSightseeingTotal +
+        Math.max(estimatedMealsTotal, fallbackExtrasTotal) +
+        serviceFee;
+
+  const dayWiseSummary = useMemo(() => {
+    if (selectedMode === "custom" && customTripDays.length > 0) {
+      return customTripDays.map((day) => ({
+        id: day.id,
+        dayLabel: day.dateLabel,
+        city: day.city,
+        summary: [
+          day.selectedHotelId ? "Hotel selected" : null,
+          day.selectedTransferIds.length > 0
+            ? `${day.selectedTransferIds.length} transfer choice`
+            : null,
+          day.selectedSightseeingIds.length > 0
+            ? `${day.selectedSightseeingIds.length} sightseeing`
+            : null,
+          day.selectedMealIds.length > 0 ? `${day.selectedMealIds.length} meal choices` : null,
+          day.selectedExtraIds.length > 0 ? `${day.selectedExtraIds.length} extras` : null,
+        ]
+          .filter(Boolean)
+          .join(" • "),
+      }));
+    }
+
+    if (dayPlans.length > 0) {
+      return dayPlans.map((day) => ({
+        id: `day-${day.day}`,
+        dayLabel: `Day ${day.day}`,
+        city: day.city,
+        summary: [
+          day.transfer,
+          day.hotel,
+          day.activities?.length ? `${day.activities.length} activities` : null,
+          day.meals?.length ? day.meals.join(", ") : null,
+        ]
+          .filter(Boolean)
+          .join(" • "),
+      }));
+    }
+
+    return [];
+  }, [selectedMode, customTripDays, dayPlans]);
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#f8fafc_35%,#ffffff_100%)]">
@@ -38,10 +117,11 @@ export default function ReviewPage() {
                 Review
               </span>
               <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-                Review your trip before confirming.
+                Review your trip before login and booking.
               </h1>
               <p className="mt-4 text-base leading-8 text-slate-600 sm:text-lg">
-                Check your selected trip details, useful extras, and current final estimate before confirmation.
+                This is now the single handoff step after Trip Builder. Check the trip, pricing,
+                and day-wise structure before moving into login and booking confirmation.
               </p>
             </div>
           </div>
@@ -50,78 +130,99 @@ export default function ReviewPage() {
         <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
           <div className="grid gap-8 xl:grid-cols-[1.05fr_0.95fr]">
             <section className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.06)] sm:p-8">
-              <div>
-                <h2 className="text-2xl font-semibold text-slate-950">
-                  {selectedPackageTitle || "Selected trip"}
-                </h2>
-               <p className="mt-2 text-sm text-slate-600">
-  {adults} Adults{children ? `, ${children} Children` : ""} • {roomPreference} •
-  Day-wise custom trip review
-</p>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-sky-700">{modeLabel}</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+                    {selectedPackageTitle || "Selected trip"}
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    {destination || "Bangkok"} • {travelDates || "Dates pending"} •{" "}
+                    {nights || "Nights pending"}
+                  </p>
+                </div>
+
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Booking reference
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-950">{bookingId}</p>
+                </div>
               </div>
 
               <div className="mt-8 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-[24px] bg-slate-50 p-5">
-                  <p className="text-sm font-medium text-slate-500">Stay</p>
-                  <p className="mt-2 font-semibold text-slate-950">
-                    ₹{estimatedHotelTotal.toLocaleString("en-IN")} hotel estimate
-                  </p>
-                </div>
+                <InfoTile
+                  label="Travelers"
+                  value={`${adults} Adults${children ? `, ${children} Children` : ""}`}
+                />
+                <InfoTile
+                  label="Rooms"
+                  value={`${rooms} Room${rooms > 1 ? "s" : ""}`}
+                />
+                <InfoTile label="Room Preference" value={roomPreference} />
+                <InfoTile label="Flights" value={selectedFlightLabel || "Without Flight"} />
+                <InfoTile label="Budget" value={budget || "Not selected"} />
+                <InfoTile label="Trip Style" value={travelStyle || "Not selected"} />
+                <InfoTile label="Traveling With" value={travellingWith || "Not selected"} />
+                <InfoTile label="Priority" value={priority || "Not selected"} />
+              </div>
 
-                <div className="rounded-[24px] bg-slate-50 p-5">
-                  <p className="text-sm font-medium text-slate-500">Transfers</p>
-                  <p className="mt-2 font-semibold text-slate-950">
-                    ₹{estimatedTransferTotal.toLocaleString("en-IN")} movement estimate
-                  </p>
-                </div>
-
-                <div className="rounded-[24px] bg-slate-50 p-5">
-                  <p className="text-sm font-medium text-slate-500">Room Preference</p>
-                  <p className="mt-2 font-semibold text-slate-950">{roomPreference}</p>
-                </div>
-
-                <div className="rounded-[24px] bg-slate-50 p-5">
-                  <p className="text-sm font-medium text-slate-500">Travelers</p>
-                  <p className="mt-2 font-semibold text-slate-950">
-                    {adults} Adults{children ? `, ${children} Children` : ""}
-                  </p>
-                </div>
-
-                <div className="rounded-[24px] bg-slate-50 p-5 sm:col-span-2">
-                  <p className="text-sm font-medium text-slate-500">Selected Extras</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {selectedExtras.length > 0 ? (
-                      selectedExtras.map((item) => (
-                        <span
-                          key={item}
-                          className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200"
-                        >
-                          {item}
-                        </span>
-                      ))
-                    ) : (
-                      <p className="text-sm font-medium text-slate-950">
-                        No extras selected
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-[24px] bg-slate-50 p-5 sm:col-span-2">
-                  <p className="text-sm font-medium text-slate-500">Experiences & meals</p>
-                  <p className="mt-2 font-semibold text-slate-950">
-                    ₹{estimatedSightseeingTotal.toLocaleString("en-IN")} sightseeing • ₹
-                    {Math.max(estimatedMealsTotal, fallbackExtrasTotal).toLocaleString("en-IN")} meals/extras
-                  </p>
+              <div className="mt-8 rounded-[28px] border border-slate-200 p-5">
+                <h3 className="text-base font-semibold text-slate-950">Trip direction</h3>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {mood ? <Tag>{mood}</Tag> : null}
+                  {budget ? <Tag>{budget}</Tag> : null}
+                  {travelStyle ? <Tag>{travelStyle}</Tag> : null}
+                  {selectedFlightLabel ? <Tag>{selectedFlightLabel}</Tag> : null}
                 </div>
               </div>
 
               <div className="mt-8 rounded-[28px] border border-slate-200 p-5">
-                <h3 className="text-base font-semibold text-slate-950">Booking Summary</h3>
-                <p className="mt-3 text-sm leading-7 text-slate-600">
-  This review now reflects the Trip Studio totals, including day-wise stay, transfer,
-  sightseeing, meal, and extras selections.
-</p>
+                <h3 className="text-base font-semibold text-slate-950">Extras and add-ons</h3>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedExtras.length === 0 && selectedAddOns.length === 0 ? (
+                    <p className="text-sm text-slate-500">No extras selected</p>
+                  ) : (
+                    <>
+                      {selectedExtras.map((item) => (
+                        <Tag key={`extra-${item}`}>{item}</Tag>
+                      ))}
+                      {selectedAddOns.map((item) => (
+                        <Tag key={`addon-${item}`}>{item}</Tag>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-8 rounded-[28px] border border-slate-200 p-5">
+                <h3 className="text-base font-semibold text-slate-950">Day-wise review</h3>
+
+                {dayWiseSummary.length > 0 ? (
+                  <div className="mt-4 space-y-3">
+                    {dayWiseSummary.map((day) => (
+                      <div
+                        key={day.id}
+                        className="rounded-[22px] bg-slate-50 px-4 py-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-950">
+                              {day.dayLabel} • {day.city}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {day.summary || "Selections pending"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-500">
+                    Day-wise summary will appear here as soon as itinerary data is available.
+                  </p>
+                )}
               </div>
             </section>
 
@@ -129,78 +230,67 @@ export default function ReviewPage() {
               <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.05)]">
                 <h2 className="text-lg font-semibold text-slate-950">Price Summary</h2>
                 <div className="mt-5 space-y-4 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Package base</span>
-                    <span className="font-medium text-slate-950">
-                      ₹{selectedPackagePrice.toLocaleString("en-IN")}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Hotel estimate</span>
-                    <span className="font-medium text-slate-950">
-                      ₹{estimatedHotelTotal.toLocaleString("en-IN")}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Transfer estimate</span>
-                    <span className="font-medium text-slate-950">
-                      ₹{estimatedTransferTotal.toLocaleString("en-IN")}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Sightseeing estimate</span>
-                    <span className="font-medium text-slate-950">
-                      ₹{estimatedSightseeingTotal.toLocaleString("en-IN")}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Meals / extras estimate</span>
-                    <span className="font-medium text-slate-950">
-                      ₹{Math.max(estimatedMealsTotal, fallbackExtrasTotal).toLocaleString("en-IN")}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Service charges</span>
-                    <span className="font-medium text-slate-950">
-                      ₹{serviceFee.toLocaleString("en-IN")}
-                    </span>
-                  </div>
+                  <PriceRow
+                    label="Package base"
+                    value={formatINR(selectedPackagePrice)}
+                  />
+                  <PriceRow
+                    label="Flights"
+                    value={formatINR(estimatedFlightTotal)}
+                  />
+                  <PriceRow
+                    label="Hotel estimate"
+                    value={formatINR(estimatedHotelTotal)}
+                  />
+                  <PriceRow
+                    label="Transfer estimate"
+                    value={formatINR(estimatedTransferTotal)}
+                  />
+                  <PriceRow
+                    label="Sightseeing estimate"
+                    value={formatINR(estimatedSightseeingTotal)}
+                  />
+                  <PriceRow
+                    label="Meals / extras estimate"
+                    value={formatINR(
+                      Math.max(estimatedMealsTotal, fallbackExtrasTotal)
+                    )}
+                  />
+                  <PriceRow
+                    label="Service charges"
+                    value={formatINR(serviceFee)}
+                  />
 
                   <div className="flex justify-between border-t border-slate-200 pt-4">
                     <span className="text-slate-700">Final Price</span>
                     <span className="text-lg font-semibold text-slate-950">
-                      ₹{finalPrice.toLocaleString("en-IN")}
+                      {formatINR(finalPrice)}
                     </span>
                   </div>
                 </div>
               </div>
 
               <div className="rounded-[36px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(15,23,42,0.05)]">
-                <p className="text-sm font-medium text-sky-700">Reference ID</p>
+                <p className="text-sm font-medium text-sky-700">Next step</p>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  Your trip details have been saved under reference{" "}
-                  <span className="font-semibold text-slate-950">{bookingId}</span>.
+                  Review is now complete. After this, we will connect login and traveler details
+                  before final booking confirmation.
                 </p>
               </div>
 
               <div className="flex flex-col gap-3">
-                <Link
-                  href={`/confirmation/${bookingId}`}
+                <button
+                  type="button"
                   className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                 >
-                  Confirm Booking
-                </Link>
+                  Continue to Login
+                </button>
 
                 <Link
-                  href="/customize"
+                  href="/trip-builder"
                   className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
                 >
-                  Back to Customize
+                  Back to Trip Builder
                 </Link>
               </div>
             </aside>
@@ -210,5 +300,31 @@ export default function ReviewPage() {
 
       <PublicFooter />
     </div>
+  );
+}
+
+function InfoTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[24px] bg-slate-50 p-5">
+      <p className="text-sm font-medium text-slate-500">{label}</p>
+      <p className="mt-2 font-semibold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function PriceRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-slate-500">{label}</span>
+      <span className="font-medium text-slate-950">{value}</span>
+    </div>
+  );
+}
+
+function Tag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
+      {children}
+    </span>
   );
 }

@@ -8,6 +8,8 @@ import {
   SendHorizonal,
   Shuffle,
 } from "lucide-react";
+import { standardPackages, type StandardPackage } from "@/lib/mock/bangkok-builder-data";
+import { useTripBuilderStore } from "@/store/useTripBuilderStore";
 
 type Props = {
   departureCityLabel: string;
@@ -71,6 +73,116 @@ function formatLongDate(value: string) {
   }).format(date);
 }
 
+function getFlightAddOn(departureAirportCode: string, includedFlights: boolean) {
+  if (!includedFlights) return 0;
+
+  const flightMap: Record<string, number> = {
+    BLR: 16500,
+    BOM: 18500,
+    DEL: 21200,
+    HYD: 17200,
+    MAA: 16800,
+    CCU: 19800,
+    COK: 17500,
+    AMD: 18600,
+    PNQ: 17900,
+    GOX: 17100,
+    JAI: 19400,
+    LKO: 20100,
+    IXC: 20500,
+    IDR: 18700,
+    NAG: 18400,
+    VTZ: 17700,
+    CJB: 16900,
+    TRV: 17600,
+    BBI: 18800,
+    GAU: 21400,
+  };
+
+  return flightMap[departureAirportCode] ?? 18200;
+}
+
+function calculatePackagePrice(params: {
+  pkg: StandardPackage;
+  adults: number;
+  children: number;
+  rooms: number;
+  departureAirportCode: string;
+  includedFlights: boolean;
+}) {
+  const { pkg, adults, children, rooms, departureAirportCode, includedFlights } = params;
+
+  const adultTotal = pkg.basePricePerPerson * adults;
+  const childTotal = Math.round(pkg.basePricePerPerson * 0.72 * children);
+  const roomAdjustment = Math.max(0, rooms - 1) * 3500;
+  const flightTotal = getFlightAddOn(departureAirportCode, includedFlights) * (adults + children);
+  const serviceFee = Math.max(
+    3000,
+    Math.round((adultTotal + childTotal + roomAdjustment + flightTotal) * 0.05)
+  );
+
+  const total = adultTotal + childTotal + roomAdjustment + flightTotal + serviceFee;
+
+  return {
+    totalPrice: Math.round(total),
+    serviceFee,
+    flightTotal,
+  };
+}
+
+function buildStorePricingBreakdown(totalPrice: number, serviceFee: number, flightTotal: number) {
+  const subtotal = Math.max(totalPrice - serviceFee - flightTotal, 0);
+
+  const hotelTotal = Math.round(subtotal * 0.46);
+  const transferTotal = Math.round(subtotal * 0.1);
+  const sightseeingTotal = Math.round(subtotal * 0.14);
+  const mealsTotal = Math.round(subtotal * 0.08);
+  const basePackage = subtotal - hotelTotal - transferTotal - sightseeingTotal - mealsTotal;
+
+  return {
+    basePackage,
+    flightTotal,
+    hotelTotal,
+    transferTotal,
+    sightseeingTotal,
+    mealsTotal,
+    grandTotal: totalPrice,
+  };
+}
+
+function buildSegments(citySplit: StandardPackage["citySplit"], departureDate: string) {
+  const segments: Array<{
+    id: string;
+    city: string;
+    destinationId: string;
+    checkIn: string;
+    checkOut: string;
+  }> = [];
+
+  const start = new Date(departureDate);
+  if (Number.isNaN(start.getTime())) return segments;
+
+  let cursor = new Date(start);
+
+  citySplit.forEach((segment, index) => {
+    const checkIn = new Date(cursor);
+    const checkOut = new Date(cursor);
+    checkOut.setDate(checkOut.getDate() + segment.nights);
+
+    segments.push({
+      id: `segment-${index + 1}`,
+      city: segment.city,
+      destinationId: `dest-${segment.city.toLowerCase().replace(/\s+/g, "-")}`,
+      checkIn: checkIn.toISOString().slice(0, 10),
+      checkOut: checkOut.toISOString().slice(0, 10),
+    });
+
+    cursor = new Date(checkOut);
+  });
+
+  return segments;
+}
+
 function buildItineraryText(state: SurpriseState, destinationCity: string) {
   const mood = state.mood.toLowerCase();
   const withFlights = state.flights === "With Flights";
@@ -115,6 +227,62 @@ function buildPackageSummary(state: SurpriseState, destinationCity: string) {
   return `Best fit direction: ${state.duration} ${destinationCity} plan · ${state.mood} mood · ${state.budget} budget · ${state.flights}.`;
 }
 
+function getDurationRange(value: string) {
+  if (value === "3N-4N") return { min: 3, max: 4 };
+  if (value === "5N-6N") return { min: 5, max: 6 };
+  if (value === "7N-8N") return { min: 7, max: 8 };
+  return { min: 9, max: 20 };
+}
+
+function chooseRecommendedPackage(state: SurpriseState) {
+  const { min, max } = getDurationRange(state.duration);
+  const wantsFlights = state.flights === "With Flights";
+
+  const durationMatches = standardPackages.filter(
+    (pkg) => pkg.durationNights >= min && pkg.durationNights <= max
+  );
+
+  const flightMatches = durationMatches.filter(
+    (pkg) => pkg.includedFlights === wantsFlights
+  );
+
+  const sourcePool = flightMatches.length > 0 ? flightMatches : durationMatches;
+
+  if (sourcePool.length === 0) {
+    return standardPackages[0] ?? null;
+  }
+
+  if (state.budget === "Luxury") {
+    return (
+      sourcePool.find((pkg) => pkg.category.includes("premium")) ??
+      sourcePool[sourcePool.length - 1]
+    );
+  }
+
+  if (state.budget === "Premium") {
+    return (
+      sourcePool.find((pkg) => pkg.hotelCategory === "4 Star") ??
+      sourcePool[Math.floor(sourcePool.length / 2)]
+    );
+  }
+
+  if (state.mood === "Romantic") {
+    return (
+      sourcePool.find((pkg) => pkg.category.includes("honeymoon")) ??
+      sourcePool[0]
+    );
+  }
+
+  if (state.mood === "Family Fun") {
+    return (
+      sourcePool.find((pkg) => pkg.category.includes("family")) ??
+      sourcePool[0]
+    );
+  }
+
+  return sourcePool[0];
+}
+
 export function AIGuidedFlow({
   departureCityLabel,
   destinationCity,
@@ -124,6 +292,18 @@ export function AIGuidedFlow({
   rooms,
 }: Props) {
   const router = useRouter();
+
+  const setTripDetails = useTripBuilderStore((state) => state.setTripDetails);
+  const setSelectedMode = useTripBuilderStore((state) => state.setSelectedMode);
+  const setBudget = useTripBuilderStore((state) => state.setBudget);
+  const setMood = useTripBuilderStore((state) => state.setMood);
+  const setTravelStyle = useTripBuilderStore((state) => state.setTravelStyle);
+  const setTravellingWith = useTripBuilderStore((state) => state.setTravellingWith);
+  const setPriority = useTripBuilderStore((state) => state.setPriority);
+  const setTravelers = useTripBuilderStore((state) => state.setTravelers);
+  const setDayPlans = useTripBuilderStore((state) => state.setDayPlans);
+  const selectPackage = useTripBuilderStore((state) => state.selectPackage);
+  const setTotals = useTripBuilderStore((state) => state.setTotals);
 
   const contextLine = `${departureCityLabel} → ${destinationCity} · ${formatLongDate(
     departureDate
@@ -212,7 +392,7 @@ export function AIGuidedFlow({
 
       pushAssistant(buildPackageSummary(nextState, destinationCity));
       pushAssistant(
-        "Choose what you want next: View Packages to open results, or Show Itinerary to see the day flow here in chat."
+        "Choose what you want next: Continue to Review with the recommended package, or Show Itinerary to see the day flow here in chat."
       );
     }
   }
@@ -240,14 +420,105 @@ export function AIGuidedFlow({
     pushAssistant("Use the next answer options below so I can keep this planning flow clean and sequential.");
   }
 
-  function handleViewPackages() {
+  function handleContinueToReview() {
     if (currentStep !== "done") {
-      pushAssistant("Complete the Surprise Me steps first, then I will open the package results page.");
+      pushAssistant("Complete the Surprise Me steps first, then I will take you to review.");
       return;
     }
 
-    pushAssistant("Opening package results.");
-    router.push("/results");
+    const recommended = chooseRecommendedPackage(state);
+
+    if (!recommended) {
+      pushAssistant("I could not find a package match yet. Try the guided steps again.");
+      return;
+    }
+
+    const includedFlights = state.flights === "With Flights";
+    const departureAirportCode =
+      departureCityLabel.split("·")[1]?.trim() || "BLR";
+
+    const priced = calculatePackagePrice({
+      pkg: recommended,
+      adults,
+      children,
+      rooms,
+      departureAirportCode,
+      includedFlights,
+    });
+
+    const pricing = buildStorePricingBreakdown(
+      priced.totalPrice,
+      priced.serviceFee,
+      priced.flightTotal
+    );
+
+    const segments = buildSegments(recommended.citySplit, departureDate);
+    const endDate = segments.at(-1)?.checkOut ?? departureDate;
+
+    const travellingWith =
+      adults >= 2 && children === 0 ? "Couple" : children > 0 ? "Family" : "Group";
+
+    const derivedTravelStyle =
+      state.budget === "Luxury"
+        ? "Luxury"
+        : state.budget === "Premium"
+        ? "Easy & Comfortable"
+        : "Balanced";
+
+    setSelectedMode("ai");
+    setBudget(state.budget);
+    setMood(state.mood);
+    setTravelStyle(derivedTravelStyle);
+    setTravellingWith(travellingWith);
+    setPriority(
+      state.mood === "Romantic"
+        ? "Better hotel"
+        : state.mood === "Family Fun"
+        ? "Family comfort"
+        : "Balanced trip"
+    );
+
+    setTripDetails({
+      selectedMode: "ai",
+      destination: destinationCity,
+      destinationId: "dest-bangkok",
+      segments,
+      travelDates: `${formatLongDate(departureDate)} - ${formatLongDate(endDate)}`,
+      nights: `${recommended.durationNights} Nights`,
+      budget: state.budget,
+      travelStyle: derivedTravelStyle,
+      travellingWith,
+      priority:
+        state.mood === "Romantic"
+          ? "Better hotel"
+          : state.mood === "Family Fun"
+          ? "Family comfort"
+          : "Balanced trip",
+      serviceFee: priced.serviceFee,
+    });
+
+    setTravelers({ adults, children, rooms });
+    setDayPlans(recommended.dayPlan);
+
+    selectPackage({
+      selectedPackageId: recommended.id,
+      selectedPackageTitle: recommended.title,
+      selectedPackagePrice: pricing.basePackage,
+      selectedFlightMode: includedFlights ? 1 : 0,
+      selectedFlightLabel: includedFlights ? "With Flight" : "Without Flight",
+    });
+
+    setTotals({
+      estimatedFlightTotal: pricing.flightTotal,
+      estimatedHotelTotal: pricing.hotelTotal,
+      estimatedTransferTotal: pricing.transferTotal,
+      estimatedSightseeingTotal: pricing.sightseeingTotal,
+      estimatedMealsTotal: pricing.mealsTotal,
+      estimatedGrandTotal: pricing.grandTotal,
+    });
+
+    pushAssistant("Perfect. I have saved the recommended package and I am opening Review.");
+    router.push("/review");
   }
 
   function handleShowItinerary() {
@@ -317,17 +588,17 @@ export function AIGuidedFlow({
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={handleViewPackages}
+                      onClick={handleShowItinerary}
                       className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
                     >
                       Show Itinerary
                     </button>
                     <button
                       type="button"
-                      onClick={handleShowItinerary}
-className="rounded-full bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      onClick={handleContinueToReview}
+                      className="rounded-full bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                     >
-                      View Packages
+                      Continue to Review
                     </button>
                   </div>
                 </div>
@@ -378,58 +649,43 @@ className="rounded-full bg-slate-950 px-4 py-2.5 text-sm font-semibold text-whit
                   <SendHorizonal className="h-4 w-4" />
                 </button>
               </div>
+
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPromptIdeas((prev) => !prev)}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
+                >
+                  {showPromptIdeas ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                  Prompt ideas
+                </button>
+
+                {showPromptIdeas ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {promptIdeas.map((idea) => (
+                      <button
+                        key={idea}
+                        type="button"
+                        onClick={() => {
+                          setInput(idea);
+                          setShowPromptIdeas(false);
+                        }}
+                        className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                      >
+                        {idea}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
       </div>
-
-      <div className="rounded-[24px] border border-slate-200 bg-white">
-        <button
-          type="button"
-          onClick={() => setShowPromptIdeas((prev) => !prev)}
-          className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left sm:px-6"
-        >
-          <div>
-            <p className="text-sm font-semibold text-slate-950">Prompt ideas</p>
-            <p className="mt-1 text-xs text-slate-500">
-              Quick starters outside the chat input.
-            </p>
-          </div>
-
-          <div className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700">
-            {showPromptIdeas ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
-          </div>
-        </button>
-
-        {showPromptIdeas ? (
-          <div className="border-t border-slate-200 px-4 py-4 sm:px-6">
-            <div className="flex flex-wrap gap-2">
-              {promptIdeas.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => {
-                    if (prompt === "Surprise me") {
-                      startSurpriseFlow();
-                      return;
-                    }
-                    setInput(prompt);
-                  }}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-100"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </div>
     </div>
   );
 }
-
-export default AIGuidedFlow;
