@@ -1,7 +1,8 @@
 "use client";
 
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowUp,
   Check,
   ChevronDown,
   ClipboardList,
@@ -37,6 +38,14 @@ type LocalDayExtra = {
   price: number;
   description: string;
 };
+
+type CollapsibleSectionKey =
+  | "tripExtras"
+  | "hotel"
+  | "sightseeing"
+  | "meals"
+  | "transfers"
+  | "extras";
 
 const tripLevelExtras: LocalTripExtra[] = [
   {
@@ -174,8 +183,20 @@ export function CustomTripFlow() {
   const [selectedTripExtraIds, setSelectedTripExtraIds] = useState<string[]>([]);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [expandedSummaryDayIds, setExpandedSummaryDayIds] = useState<string[]>([]);
+  const [showJumpToDays, setShowJumpToDays] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Record<CollapsibleSectionKey, boolean>>(
+    {
+      tripExtras: false,
+      hotel: false,
+      sightseeing: false,
+      meals: false,
+      transfers: false,
+      extras: false,
+    }
+  );
 
   const totalPax = adults + children;
+  const daySelectorRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (customTripDays.length === 0) {
@@ -195,6 +216,16 @@ export function CustomTripFlow() {
     setSightseeingSearch("");
     setMealSearch("");
   }, [activeDayId]);
+
+  useEffect(() => {
+    function handleScroll() {
+      setShowJumpToDays(window.scrollY > 700);
+    }
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const activeDay = useMemo(
     () => customTripDays.find((day) => day.id === activeDayId) ?? customTripDays[0],
@@ -325,6 +356,43 @@ export function CustomTripFlow() {
     }, 0);
   }, [selectedTripExtraIds]);
 
+  const hotelSectionPrice = useMemo(() => {
+    const selectedHotel = hotels.find((item) => item.id === activeDay?.selectedHotelId);
+    return selectedHotel?.nightlyRate ?? 0;
+  }, [activeDay]);
+
+  const sightseeingSectionPrice = useMemo(() => {
+    if (!activeDay) return 0;
+    return activeDay.selectedSightseeingIds.reduce((sum, id) => {
+      const option = sightseeing.find((item) => item.id === id);
+      return sum + (option ? option.price : 0);
+    }, 0);
+  }, [activeDay]);
+
+  const mealsSectionPrice = useMemo(() => {
+    if (!activeDay) return 0;
+    return activeDay.selectedMealIds.reduce((sum, id) => {
+      const meal = meals.find((item) => item.id === id);
+      return sum + (meal ? meal.price * totalPax : 0);
+    }, 0);
+  }, [activeDay, totalPax]);
+
+  const transfersSectionPrice = useMemo(() => {
+    if (!activeDay) return 0;
+    return activeDay.selectedTransferIds.reduce((sum, id) => {
+      const transfer = transfers.find((item) => item.id === id);
+      return sum + (transfer ? transfer.price : 0);
+    }, 0);
+  }, [activeDay]);
+
+  const extrasSectionPrice = useMemo(() => {
+    if (!activeDay) return 0;
+    return activeDay.selectedExtraIds.reduce((sum, id) => {
+      const match = dayLevelExtras.find((item) => item.id === id);
+      return sum + (match ? match.price : 0);
+    }, 0);
+  }, [activeDay]);
+
   const pricing = useMemo(() => {
     const hotelTotal = customTripDays.reduce((sum, day) => {
       const selectedHotel = hotels.find((item) => item.id === day.selectedHotelId);
@@ -420,6 +488,13 @@ export function CustomTripFlow() {
     );
   }
 
+  function toggleSection(section: CollapsibleSectionKey) {
+    setCollapsedSections((prev) => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
+  }
+
   function handleTransferSelect(transferId: string) {
     const alreadySelected = activeDay.selectedTransferIds.includes(transferId);
 
@@ -484,6 +559,10 @@ export function CustomTripFlow() {
     setSummaryOpen(true);
   }
 
+  function jumpToDaySelector() {
+    daySelectorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function getDayTotal(day: CustomTripDay) {
     const hotelTotal = hotels.find((item) => item.id === day.selectedHotelId)?.nightlyRate ?? 0;
 
@@ -511,788 +590,835 @@ export function CustomTripFlow() {
   }
 
   return (
-    <div className="space-y-5 pb-32 xl:pb-10">
-      <section className="rounded-[28px] border border-slate-200 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_100%)] p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
-              Custom Trip Studio
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-              Build the trip day by day
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
-              Complete each day with province, hotel stars, hotel, sightseeing, meals, transfer,
-              and optional extras.
-            </p>
+    <>
+      <div className="space-y-5 pb-32 xl:pb-10">
+        <section className="rounded-[28px] border border-slate-200 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_100%)] p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
+                Custom Trip Studio
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                Build the trip day by day
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
+                Complete each day with province, hotel stars, hotel, sightseeing, meals, transfer,
+                and optional extras.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <SummaryMini label="Travellers" value={`${totalPax}`} />
+              <SummaryMini label="Rooms" value={`${rooms}`} />
+              <SummaryMini label="Days" value={`${customTripDays.length}`} />
+              <SummaryMini label="Current Total" value={formatINR(pricing.grandTotal)} />
+            </div>
           </div>
+        </section>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <SummaryMini label="Travellers" value={`${totalPax}`} />
-            <SummaryMini label="Rooms" value={`${rooms}`} />
-            <SummaryMini label="Days" value={`${customTripDays.length}`} />
-            <SummaryMini label="Current Total" value={formatINR(pricing.grandTotal)} />
-          </div>
-        </div>
-      </section>
+        <section
+          ref={daySelectorRef}
+          className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
+            Day Selector
+          </p>
+          <h3 className="mt-2 text-[2rem] font-semibold leading-tight tracking-tight text-slate-950">
+            Switch day instantly
+          </h3>
 
-      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
-          Day Selector
-        </p>
-        <h3 className="mt-2 text-[2rem] font-semibold leading-tight tracking-tight text-slate-950">
-          Switch day instantly
-        </h3>
+          <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3">
+            {customTripDays.map((day) => {
+              const active = day.id === activeDay.id;
+              const complete = isDayComplete(day);
 
-        <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3">
-          {customTripDays.map((day) => {
-            const active = day.id === activeDay.id;
-            const complete = isDayComplete(day);
+              return (
+                <button
+                  key={day.id}
+                  type="button"
+                  onClick={() => setActiveDayId(day.id)}
+                  className={`rounded-[24px] border px-5 py-5 text-left transition ${
+                    active
+                      ? "border-orange-300 bg-[#fffaf3]"
+                      : "border-slate-200 bg-[#f8fafc] hover:bg-white"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-semibold text-slate-950">
+                        Day {day.dayNumber}
+                      </p>
+                      <p className="mt-2 truncate text-[13px] text-slate-600">{day.city}</p>
+                      <p className="mt-1 truncate text-[13px] text-slate-400">
+                        {formatDayType(day.dayType)}
+                      </p>
+                    </div>
 
-            return (
-              <button
-                key={day.id}
-                type="button"
-                onClick={() => setActiveDayId(day.id)}
-                className={`rounded-[24px] border px-5 py-5 text-left transition ${
-                  active
-                    ? "border-orange-300 bg-[#fffaf3]"
-                    : "border-slate-200 bg-[#f8fafc] hover:bg-white"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[15px] font-semibold text-slate-950">
-                      Day {day.dayNumber}
-                    </p>
-                    <p className="mt-2 truncate text-[13px] text-slate-600">{day.city}</p>
-                    <p className="mt-1 truncate text-[13px] text-slate-400">
-                      {formatDayType(day.dayType)}
-                    </p>
-                  </div>
-
-                  <span
-                    className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
-                      complete
-                        ? "bg-emerald-500 text-white"
-                        : "bg-slate-200 text-slate-500"
-                    }`}
-                  >
-                    <Check className="h-4 w-4" />
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <main className="space-y-6">
-          <SectionCard
-            title={`Day ${activeDay.dayNumber} · ${activeDay.city}`}
-            subtitle={formatDayType(activeDay.dayType)}
-          >
-            <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    <MapPin className="h-4 w-4" />
-                    Province
-                  </div>
-                  <select
-                    value={activeDay.city}
-                    onChange={(event) =>
-                      updateCustomTripDay(activeDay.id, {
-                        city: event.target.value,
-                        selectedHotelId: "",
-                        selectedTransferIds: [],
-                        selectedSightseeingIds: [],
-                        selectedMealIds: [],
-                      })
-                    }
-                    className="mt-2 w-full bg-transparent text-sm font-semibold text-slate-950 outline-none"
-                  >
-                    {availableCities.map((city) => (
-                      <option key={city} value={city}>
-                        {city}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Completion
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-950">
-                    {isDayComplete(activeDay) ? "Ready to continue" : "Selections pending"}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Hotel, sightseeing, meals, and transfer are mandatory.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {(["all", "morning", "afternoon", "evening", "night"] as const).map((slot) => {
-                  const active = activeDay.activeSlotFilter === slot;
-                  return (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() =>
-                        updateCustomTripDay(activeDay.id, {
-                          activeSlotFilter: slot as DayMoment | "all",
-                        })
-                      }
-                      className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                        active
-                          ? "bg-slate-950 text-white"
-                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    <span
+                      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                        complete
+                          ? "bg-emerald-500 text-white"
+                          : "bg-slate-200 text-slate-500"
                       }`}
                     >
-                      {slot === "all" ? "All Slots" : slot}
+                      <Check className="h-4 w-4" />
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <main className="space-y-6">
+            <SectionCard
+              title={`Day ${activeDay.dayNumber} · ${activeDay.city}`}
+              subtitle={formatDayType(activeDay.dayType)}
+            >
+              <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      <MapPin className="h-4 w-4" />
+                      Province
+                    </div>
+                    <select
+                      value={activeDay.city}
+                      onChange={(event) =>
+                        updateCustomTripDay(activeDay.id, {
+                          city: event.target.value,
+                          selectedHotelId: "",
+                          selectedTransferIds: [],
+                          selectedSightseeingIds: [],
+                          selectedMealIds: [],
+                        })
+                      }
+                      className="mt-2 w-full bg-transparent text-sm font-semibold text-slate-950 outline-none"
+                    >
+                      {availableCities.map((city) => (
+                        <option key={city} value={city}>
+                          {city}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Completion
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-950">
+                      {isDayComplete(activeDay) ? "Ready to continue" : "Selections pending"}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Hotel, sightseeing, meals, and transfer are mandatory.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {(["all", "morning", "afternoon", "evening", "night"] as const).map((slot) => {
+                    const active = activeDay.activeSlotFilter === slot;
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() =>
+                          updateCustomTripDay(activeDay.id, {
+                            activeSlotFilter: slot as DayMoment | "all",
+                          })
+                        }
+                        className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                          active
+                            ? "bg-slate-950 text-white"
+                            : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                        }`}
+                      >
+                        {slot === "all" ? "All Slots" : slot}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </SectionCard>
+
+            <CollapsibleSectionCard
+              title="Trip-level Extras"
+              subtitle="Select once for the full trip. These do not repeat every day."
+              price={tripExtrasTotal}
+              collapsed={collapsedSections.tripExtras}
+              onToggle={() => toggleSection("tripExtras")}
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                {tripLevelExtras.map((item) => {
+                  const active = selectedTripExtraIds.includes(item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => toggleTripExtra(item.id)}
+                      className={`rounded-[24px] border p-4 text-left transition ${
+                        active
+                          ? "border-orange-300 bg-orange-50"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          <span
+                            className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${
+                              active ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {item.icon}
+                          </span>
+                          <div>
+                            <p className="text-base font-semibold text-slate-950">{item.label}</p>
+                            <p className="mt-2 text-sm text-slate-600">{item.description}</p>
+                          </div>
+                        </div>
+                        <p className="text-sm font-semibold text-slate-950">
+                          {formatINR(item.price)}
+                        </p>
+                      </div>
                     </button>
                   );
                 })}
               </div>
-            </div>
-          </SectionCard>
+            </CollapsibleSectionCard>
 
-          <SectionCard
-            title="Trip-level Extras"
-            subtitle="Select once for the full trip. These do not repeat every day."
-          >
-            <div className="grid gap-4 md:grid-cols-2">
-              {tripLevelExtras.map((item) => {
-                const active = selectedTripExtraIds.includes(item.id);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => toggleTripExtra(item.id)}
-                    className={`rounded-[24px] border p-4 text-left transition ${
-                      active
-                        ? "border-orange-300 bg-orange-50"
-                        : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <span
-                          className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${
-                            active ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-700"
-                          }`}
-                        >
-                          {item.icon}
-                        </span>
-                        <div>
-                          <p className="text-base font-semibold text-slate-950">{item.label}</p>
-                          <p className="mt-2 text-sm text-slate-600">{item.description}</p>
-                        </div>
-                      </div>
-                      <p className="text-sm font-semibold text-slate-950">{formatINR(item.price)}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </SectionCard>
+            <CollapsibleSectionCard
+              title="Hotel Stars + Hotel Selection"
+              subtitle="Hotel stars are mandatory. Hotel selection is mandatory."
+              price={hotelSectionPrice}
+              collapsed={collapsedSections.hotel}
+              onToggle={() => toggleSection("hotel")}
+            >
+              <SearchField
+                placeholder="Search hotel by name, area, category or amenity"
+                value={hotelSearch}
+                onChange={setHotelSearch}
+              />
 
-          <SectionCard
-            title="Hotel Stars + Hotel Selection"
-            subtitle="Hotel stars are mandatory. Hotel selection is mandatory."
-          >
-            <SearchField
-              placeholder="Search hotel by name, area, category or amenity"
-              value={hotelSearch}
-              onChange={setHotelSearch}
-            />
+              <div className="mt-4 flex flex-wrap gap-3">
+                {(["3 Star", "4 Star", "5 Star"] as const).map((category) => {
+                  const active = activeDay.hotelCategory === category;
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() =>
+                        updateCustomTripDay(activeDay.id, {
+                          hotelCategory: category,
+                          selectedHotelId: "",
+                        })
+                      }
+                      className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                        active
+                          ? "bg-orange-500 text-white"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      {category}
+                    </button>
+                  );
+                })}
+              </div>
 
-            <div className="mt-4 flex flex-wrap gap-3">
-              {(["3 Star", "4 Star", "5 Star"] as const).map((category) => {
-                const active = activeDay.hotelCategory === category;
-                return (
-                  <button
-                    key={category}
-                    type="button"
-                    onClick={() =>
-                      updateCustomTripDay(activeDay.id, {
-                        hotelCategory: category,
-                        selectedHotelId: "",
-                      })
-                    }
-                    className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                      active
-                        ? "bg-orange-500 text-white"
-                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                    }`}
-                  >
-                    {category}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-5 grid gap-4 lg:grid-cols-2">
-              {destinationHotels.map((hotel) => {
-                const active = activeDay.selectedHotelId === hotel.id;
-                return (
-                  <button
-                    key={hotel.id}
-                    type="button"
-                    onClick={() =>
-                      updateCustomTripDay(activeDay.id, { selectedHotelId: hotel.id })
-                    }
-                    className={`overflow-hidden rounded-[24px] border text-left transition ${
-                      active
-                        ? "border-orange-300 bg-orange-50 shadow-[0_12px_26px_rgba(249,115,22,0.14)]"
-                        : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="relative h-44 overflow-hidden bg-slate-100">
-                      <img src={hotel.image} alt={hotel.name} className="h-full w-full object-cover" />
-                      {active ? (
-                        <div className="absolute right-3 top-3 rounded-full bg-orange-500 px-3 py-1 text-xs font-semibold text-white">
-                          Selected
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-base font-semibold text-slate-950">{hotel.name}</p>
-                          <p className="mt-1 text-sm text-slate-500">
-                            {hotel.area} · {hotel.category}
-                          </p>
-                        </div>
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700">
-                          {hotel.rating.toFixed(1)}
-                        </span>
+              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                {destinationHotels.map((hotel) => {
+                  const active = activeDay.selectedHotelId === hotel.id;
+                  return (
+                    <button
+                      key={hotel.id}
+                      type="button"
+                      onClick={() =>
+                        updateCustomTripDay(activeDay.id, { selectedHotelId: hotel.id })
+                      }
+                      className={`overflow-hidden rounded-[24px] border text-left transition ${
+                        active
+                          ? "border-orange-300 bg-orange-50 shadow-[0_12px_26px_rgba(249,115,22,0.14)]"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="relative h-44 overflow-hidden bg-slate-100">
+                        <img
+                          src={hotel.image}
+                          alt={hotel.name}
+                          className="h-full w-full object-cover"
+                        />
+                        {active ? (
+                          <div className="absolute right-3 top-3 rounded-full bg-orange-500 px-3 py-1 text-xs font-semibold text-white">
+                            Selected
+                          </div>
+                        ) : null}
                       </div>
 
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {hotel.amenities.slice(0, 3).map((item) => (
-                          <Pill key={item} value={item} />
-                        ))}
-                      </div>
-
-                      <p className="mt-4 text-sm font-semibold text-slate-950">
-                        {formatINR(hotel.nightlyRate)} / night
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Sightseeing"
-            subtitle="Select minimum 1 and maximum 4. Results follow the active time-slot filter."
-          >
-            <SearchField
-              placeholder="Search sightseeing by name, area, type or tags"
-              value={sightseeingSearch}
-              onChange={setSightseeingSearch}
-            />
-
-            <div className="mt-3 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              Selected:{" "}
-              <span className="font-semibold">
-                {activeDay.selectedSightseeingIds.length}/4
-              </span>
-            </div>
-
-            <div className="mt-5 space-y-5">
-              {daySightseeing.map((item) => {
-                const active = activeDay.selectedSightseeingIds.includes(item.id);
-                const limitReached =
-                  !active && activeDay.selectedSightseeingIds.length >= 4;
-
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    disabled={limitReached}
-                    onClick={() => handleSightseeingToggle(item.id)}
-                    className={`w-full rounded-[24px] border p-4 text-left transition ${
-                      active
-                        ? "border-orange-300 bg-orange-50"
-                        : "border-slate-200 bg-white hover:border-slate-300"
-                    } ${limitReached ? "cursor-not-allowed opacity-50" : ""}`}
-                  >
-                    <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                      <div className="grid grid-cols-[1.2fr_0.8fr] gap-3">
-                        <div className="h-52 overflow-hidden rounded-[18px] bg-slate-100">
-                          <img src={item.gallery[0]} alt={item.name} className="h-full w-full object-cover" />
-                        </div>
-                        <div className="grid gap-3">
-                          {item.gallery.slice(1, 3).map((image) => (
-                            <div key={image} className="h-[100px] overflow-hidden rounded-[18px] bg-slate-100">
-                              <img src={image} alt={item.name} className="h-full w-full object-cover" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="flex flex-wrap gap-2">
-                          {item.availableSlots.map((slot) => (
-                            <Pill key={slot} value={slot} />
-                          ))}
-                          {item.pickupIncluded ? <Pill value="Pickup Included" /> : null}
-                          {item.suitableOnArrivalDay ? <Pill value="Arrival Friendly" /> : null}
-                        </div>
-
-                        <h4 className="mt-4 text-xl font-semibold text-slate-950">{item.name}</h4>
-                        <p className="mt-2 text-sm text-slate-600">
-                          {item.type} · {item.duration} · {item.area}
-                        </p>
-
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {item.tags.map((tag) => (
-                            <Pill key={tag} value={tag} />
-                          ))}
-                        </div>
-
-                        <p className="mt-5 text-base font-semibold text-slate-950">
-                          {formatINR(item.price)}
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Meals"
-            subtitle={`Select exactly one breakfast, one lunch, and one dinner for each day. Pricing below is for ${totalPax} traveller${totalPax > 1 ? "s" : ""}.`}
-          >
-            <SearchField
-              placeholder="Search meals by name, cuisine, preference or meal type"
-              value={mealSearch}
-              onChange={setMealSearch}
-            />
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <StatusBox
-                label="Breakfast"
-                complete={breakfastSelected}
-                value={selectedBreakfast?.name ?? "Not selected"}
-              />
-              <StatusBox
-                label="Lunch"
-                complete={lunchSelected}
-                value={selectedLunch?.name ?? "Not selected"}
-              />
-              <StatusBox
-                label="Dinner"
-                complete={dinnerSelected}
-                value={selectedDinner?.name ?? "Not selected"}
-              />
-            </div>
-
-            <div className="mt-6 space-y-6">
-              <MealGroup
-                title="Breakfast"
-                items={breakfastMeals}
-                selectedMealId={selectedBreakfast?.id}
-                onSelect={handleMealSelect}
-                totalPax={totalPax}
-              />
-
-              <MealGroup
-                title="Lunch"
-                items={lunchMeals}
-                selectedMealId={selectedLunch?.id}
-                onSelect={handleMealSelect}
-                totalPax={totalPax}
-              />
-
-              <MealGroup
-                title="Dinner"
-                items={dinnerMeals}
-                selectedMealId={selectedDinner?.id}
-                onSelect={handleMealSelect}
-                totalPax={totalPax}
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Transfers"
-            subtitle="Exactly one transfer must be selected for each day."
-          >
-            <SearchField
-              placeholder="Search transfer by purpose, vehicle or description"
-              value={transferSearch}
-              onChange={setTransferSearch}
-            />
-
-            <div className="mt-5 grid gap-4 lg:grid-cols-2">
-              {dayTransfers.map((item) => {
-                const active = activeDay.selectedTransferIds.includes(item.id);
-                const transferImage =
-                  (item as { image?: string }).image ??
-                  "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1200&q=80";
-
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleTransferSelect(item.id)}
-                    className={`overflow-hidden rounded-[24px] border text-left transition ${
-                      active
-                        ? "border-orange-300 bg-orange-50"
-                        : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="h-40 overflow-hidden bg-slate-100">
-                      <img src={transferImage} alt={item.name} className="h-full w-full object-cover" />
-                    </div>
-
-                    <div className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-base font-semibold text-slate-950">{hotel.name}</p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {hotel.area} · {hotel.category}
+                            </p>
+                          </div>
                           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700">
-                            {getTransferLabel(item.purpose)}
+                            {hotel.rating.toFixed(1)}
                           </span>
-                          <p className="mt-3 text-base font-semibold text-slate-950">{item.name}</p>
-                          <p className="mt-1 text-sm text-slate-600">{item.description}</p>
-                          <p className="mt-2 text-xs text-slate-500">
-                            {item.vehicleClass} · {item.minPax}-{item.maxPax} pax
-                          </p>
                         </div>
 
-                        <div className="text-right">
-                          <p className="text-sm font-semibold text-slate-950">
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {hotel.amenities.slice(0, 3).map((item) => (
+                            <Pill key={item} value={item} />
+                          ))}
+                        </div>
+
+                        <p className="mt-4 text-sm font-semibold text-slate-950">
+                          {formatINR(hotel.nightlyRate)} / night
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </CollapsibleSectionCard>
+
+            <CollapsibleSectionCard
+              title="Sightseeing"
+              subtitle="Select minimum 1 and maximum 4. Results follow the active time-slot filter."
+              price={sightseeingSectionPrice}
+              collapsed={collapsedSections.sightseeing}
+              onToggle={() => toggleSection("sightseeing")}
+            >
+              <SearchField
+                placeholder="Search sightseeing by name, area, type or tags"
+                value={sightseeingSearch}
+                onChange={setSightseeingSearch}
+              />
+
+              <div className="mt-3 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                Selected:{" "}
+                <span className="font-semibold">
+                  {activeDay.selectedSightseeingIds.length}/4
+                </span>
+              </div>
+
+              <div className="mt-5 space-y-5">
+                {daySightseeing.map((item) => {
+                  const active = activeDay.selectedSightseeingIds.includes(item.id);
+                  const limitReached = !active && activeDay.selectedSightseeingIds.length >= 4;
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      disabled={limitReached}
+                      onClick={() => handleSightseeingToggle(item.id)}
+                      className={`w-full rounded-[24px] border p-4 text-left transition ${
+                        active
+                          ? "border-orange-300 bg-orange-50"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      } ${limitReached ? "cursor-not-allowed opacity-50" : ""}`}
+                    >
+                      <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                        <div className="grid grid-cols-[1.2fr_0.8fr] gap-3">
+                          <div className="h-52 overflow-hidden rounded-[18px] bg-slate-100">
+                            <img
+                              src={item.gallery[0]}
+                              alt={item.name}
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                          <div className="grid gap-3">
+                            {item.gallery.slice(1, 3).map((image) => (
+                              <div
+                                key={image}
+                                className="h-[100px] overflow-hidden rounded-[18px] bg-slate-100"
+                              >
+                                <img
+                                  src={image}
+                                  alt={item.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex flex-wrap gap-2">
+                            {item.availableSlots.map((slot) => (
+                              <Pill key={slot} value={slot} />
+                            ))}
+                            {item.pickupIncluded ? <Pill value="Pickup Included" /> : null}
+                            {item.suitableOnArrivalDay ? <Pill value="Arrival Friendly" /> : null}
+                          </div>
+
+                          <h4 className="mt-4 text-xl font-semibold text-slate-950">{item.name}</h4>
+                          <p className="mt-2 text-sm text-slate-600">
+                            {item.type} · {item.duration} · {item.area}
+                          </p>
+
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {item.tags.map((tag) => (
+                              <Pill key={tag} value={tag} />
+                            ))}
+                          </div>
+
+                          <p className="mt-5 text-base font-semibold text-slate-950">
                             {formatINR(item.price)}
                           </p>
                         </div>
                       </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </SectionCard>
+                    </button>
+                  );
+                })}
+              </div>
+            </CollapsibleSectionCard>
 
-          <SectionCard
-            title="Extras"
-            subtitle="Extras are optional and can be chosen day-wise."
-          >
-            <div className="grid gap-4 lg:grid-cols-2">
-              {dayLevelExtras.map((item) => {
-                const active = activeDay.selectedExtraIds.includes(item.id);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() =>
-                      toggleCustomTripDayItem(activeDay.id, "selectedExtraIds", item.id)
-                    }
-                    className={`rounded-[24px] border p-4 text-left transition ${
-                      active
-                        ? "border-orange-300 bg-orange-50"
-                        : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-base font-semibold text-slate-950">{item.label}</p>
-                        <p className="mt-2 text-sm text-slate-600">{item.description}</p>
+            <CollapsibleSectionCard
+              title="Meals"
+              subtitle={`Select exactly one breakfast, one lunch, and one dinner for each day. Pricing below is for ${totalPax} traveller${totalPax > 1 ? "s" : ""}.`}
+              price={mealsSectionPrice}
+              collapsed={collapsedSections.meals}
+              onToggle={() => toggleSection("meals")}
+            >
+              <SearchField
+                placeholder="Search meals by name, cuisine, preference or meal type"
+                value={mealSearch}
+                onChange={setMealSearch}
+              />
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <StatusBox
+                  label="Breakfast"
+                  complete={breakfastSelected}
+                  value={selectedBreakfast?.name ?? "Not selected"}
+                />
+                <StatusBox
+                  label="Lunch"
+                  complete={lunchSelected}
+                  value={selectedLunch?.name ?? "Not selected"}
+                />
+                <StatusBox
+                  label="Dinner"
+                  complete={dinnerSelected}
+                  value={selectedDinner?.name ?? "Not selected"}
+                />
+              </div>
+
+              <div className="mt-6 space-y-6">
+                <MealGroup
+                  title="Breakfast"
+                  items={breakfastMeals}
+                  selectedMealId={selectedBreakfast?.id}
+                  onSelect={handleMealSelect}
+                  totalPax={totalPax}
+                />
+
+                <MealGroup
+                  title="Lunch"
+                  items={lunchMeals}
+                  selectedMealId={selectedLunch?.id}
+                  onSelect={handleMealSelect}
+                  totalPax={totalPax}
+                />
+
+                <MealGroup
+                  title="Dinner"
+                  items={dinnerMeals}
+                  selectedMealId={selectedDinner?.id}
+                  onSelect={handleMealSelect}
+                  totalPax={totalPax}
+                />
+              </div>
+            </CollapsibleSectionCard>
+
+            <CollapsibleSectionCard
+              title="Transfers"
+              subtitle="Exactly one transfer must be selected for each day."
+              price={transfersSectionPrice}
+              collapsed={collapsedSections.transfers}
+              onToggle={() => toggleSection("transfers")}
+            >
+              <SearchField
+                placeholder="Search transfer by purpose, vehicle or description"
+                value={transferSearch}
+                onChange={setTransferSearch}
+              />
+
+              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                {dayTransfers.map((item) => {
+                  const active = activeDay.selectedTransferIds.includes(item.id);
+                  const transferImage =
+                    (item as { image?: string }).image ??
+                    "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1200&q=80";
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleTransferSelect(item.id)}
+                      className={`overflow-hidden rounded-[24px] border text-left transition ${
+                        active
+                          ? "border-orange-300 bg-orange-50"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="h-40 overflow-hidden bg-slate-100">
+                        <img
+                          src={transferImage}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                        />
                       </div>
-                      <p className="text-sm font-semibold text-slate-950">{formatINR(item.price)}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </SectionCard>
 
-          <SectionCard
-            title="Day Notes"
-            subtitle="Operational notes for this day."
-          >
-            <textarea
-              value={activeDay.notes}
-              onChange={(event) =>
-                updateCustomTripDay(activeDay.id, { notes: event.target.value })
-              }
-              placeholder="Add notes like slow arrival day, vegetarian only, avoid early morning, senior-friendly pace, etc."
-              className="min-h-[120px] w-full rounded-[22px] border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-orange-300"
-            />
-          </SectionCard>
-        </main>
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700">
+                              {getTransferLabel(item.purpose)}
+                            </span>
+                            <p className="mt-3 text-base font-semibold text-slate-950">{item.name}</p>
+                            <p className="mt-1 text-sm text-slate-600">{item.description}</p>
+                            <p className="mt-2 text-xs text-slate-500">
+                              {item.vehicleClass} · {item.minPax}-{item.maxPax} pax
+                            </p>
+                          </div>
 
-        <aside className="hidden space-y-4 xl:sticky xl:top-28 xl:block xl:self-start">
-          <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
-              Pricing Summary
-            </p>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-slate-950">
+                              {formatINR(item.price)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </CollapsibleSectionCard>
 
-            <div className="mt-5 space-y-4 text-sm">
-              <PriceRow label="Package base" value={pricing.basePrice} />
-              <PriceRow label="Hotels" value={pricing.hotelTotal} />
-              <PriceRow label="Transfers" value={pricing.transferTotal} />
-              <PriceRow label="Sightseeing" value={pricing.sightseeingTotal} />
-              <PriceRow label={`Meals (${totalPax} pax)`} value={pricing.mealsTotal} />
-              <PriceRow label="Trip extras" value={pricing.tripExtrasTotal} />
-              <PriceRow label="Day extras" value={pricing.dayExtrasTotal} />
-            </div>
-
-            <button
-              type="button"
-              onClick={openSummary}
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            <CollapsibleSectionCard
+              title="Extras"
+              subtitle="Extras are optional and can be chosen day-wise."
+              price={extrasSectionPrice}
+              collapsed={collapsedSections.extras}
+              onToggle={() => toggleSection("extras")}
             >
-              <ClipboardList className="h-4 w-4" />
-              Summary
-            </button>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {dayLevelExtras.map((item) => {
+                  const active = activeDay.selectedExtraIds.includes(item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() =>
+                        toggleCustomTripDayItem(activeDay.id, "selectedExtraIds", item.id)
+                      }
+                      className={`rounded-[24px] border p-4 text-left transition ${
+                        active
+                          ? "border-orange-300 bg-orange-50"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-base font-semibold text-slate-950">{item.label}</p>
+                          <p className="mt-2 text-sm text-slate-600">{item.description}</p>
+                        </div>
+                        <p className="text-sm font-semibold text-slate-950">
+                          {formatINR(item.price)}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </CollapsibleSectionCard>
 
-            <button
-              type="button"
-              disabled={!allDaysCompleted}
-              className={`mt-3 w-full rounded-full px-4 py-3 text-sm font-semibold transition ${
-                allDaysCompleted
-                  ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                  : "cursor-not-allowed bg-slate-200 text-slate-500"
-              }`}
-            >
-              Continue
-            </button>
+            <SectionCard title="Day Notes" subtitle="Operational notes for this day.">
+              <textarea
+                value={activeDay.notes}
+                onChange={(event) =>
+                  updateCustomTripDay(activeDay.id, { notes: event.target.value })
+                }
+                placeholder="Add notes like slow arrival day, vegetarian only, avoid early morning, senior-friendly pace, etc."
+                className="min-h-[120px] w-full rounded-[22px] border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-orange-300"
+              />
+            </SectionCard>
+          </main>
 
-            {!allDaysCompleted ? (
-              <p className="mt-3 text-xs leading-6 text-slate-500">
-                Continue unlocks only after every day has province, hotel stars, hotel,
-                1 to 4 sightseeing items, breakfast, lunch, dinner, and exactly 1 transfer.
+          <aside className="hidden space-y-4 xl:sticky xl:top-28 xl:block xl:self-start">
+            <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
+                Pricing Summary
               </p>
-            ) : null}
-          </div>
-        </aside>
-      </section>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur xl:hidden">
-        <div className="mx-auto max-w-md">
-          <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
-                  Day {activeDay.dayNumber}
-                </p>
-                <p className="mt-1 truncate text-sm font-semibold text-slate-950">
-                  {activeDay.city} · {formatDayType(activeDay.dayType)}
-                </p>
-                <p className="mt-1 truncate text-xs text-slate-500">
-                  {customTripDays.filter(isDayComplete).length}/{customTripDays.length} days complete
-                </p>
+              <div className="mt-5 space-y-4 text-sm">
+                <PriceRow label="Package base" value={pricing.basePrice} />
+                <PriceRow label="Hotels" value={pricing.hotelTotal} />
+                <PriceRow label="Transfers" value={pricing.transferTotal} />
+                <PriceRow label="Sightseeing" value={pricing.sightseeingTotal} />
+                <PriceRow label={`Meals (${totalPax} pax)`} value={pricing.mealsTotal} />
+                <PriceRow label="Trip extras" value={pricing.tripExtrasTotal} />
+                <PriceRow label="Day extras" value={pricing.dayExtrasTotal} />
               </div>
 
-              <div className="shrink-0 text-right">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                  Total
-                </p>
-                <p className="mt-1 text-xl font-semibold leading-none text-slate-950">
-                  {formatINR(pricing.grandTotal)}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={openSummary}
-                className="rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
+                <ClipboardList className="h-4 w-4" />
                 Summary
               </button>
 
               <button
                 type="button"
                 disabled={!allDaysCompleted}
-                className={`rounded-full px-4 py-3 text-sm font-semibold transition ${
+                className={`mt-3 w-full rounded-full px-4 py-3 text-sm font-semibold transition ${
                   allDaysCompleted
-                    ? "bg-emerald-500 text-white"
+                    ? "bg-emerald-500 text-white hover:bg-emerald-600"
                     : "cursor-not-allowed bg-slate-200 text-slate-500"
                 }`}
               >
                 Continue
               </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {summaryOpen ? (
-        <div className="fixed inset-0 z-[120] bg-slate-950/55 p-4">
-          <div className="mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_30px_80px_rgba(15,23,42,0.25)]">
-            <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
-                  Summary
+              {!allDaysCompleted ? (
+                <p className="mt-3 text-xs leading-6 text-slate-500">
+                  Continue unlocks only after every day has province, hotel stars, hotel,
+                  1 to 4 sightseeing items, breakfast, lunch, dinner, and exactly 1 transfer.
                 </p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-950">
-                  Day-wise trip selections
-                </h3>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSummaryOpen(false)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              ) : null}
             </div>
+          </aside>
+        </section>
 
-            <div className="flex-1 overflow-y-auto px-5 py-5">
-              <div className="space-y-4">
-                {customTripDays.map((day) => {
-                  const expanded = expandedSummaryDayIds.includes(day.id);
-                  const hotel = hotels.find((item) => item.id === day.selectedHotelId);
-                  const transferNames = day.selectedTransferIds
-                    .map((id) => transfers.find((item) => item.id === id)?.name)
-                    .filter(Boolean) as string[];
-                  const sightseeingNames = day.selectedSightseeingIds
-                    .map((id) => sightseeing.find((item) => item.id === id)?.name)
-                    .filter(Boolean) as string[];
-                  const mealNames = day.selectedMealIds
-                    .map((id) => {
-                      const meal = meals.find((item) => item.id === id);
-                      if (!meal) return null;
-                      return `${meal.name} × ${totalPax}`;
-                    })
-                    .filter(Boolean) as string[];
-                  const extraNames = day.selectedExtraIds
-                    .map((id) => dayLevelExtras.find((item) => item.id === id)?.label)
-                    .filter(Boolean) as string[];
-
-                  return (
-                    <div
-                      key={day.id}
-                      className="overflow-hidden rounded-[24px] border border-slate-200 bg-white"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => toggleSummaryDay(day.id)}
-                        className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-base font-semibold text-slate-950">
-                              Day {day.dayNumber} · {day.city}
-                            </p>
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                                isDayComplete(day)
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-amber-100 text-amber-700"
-                              }`}
-                            >
-                              {isDayComplete(day) ? "Complete" : "Pending"}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-sm text-slate-500">{formatDayType(day.dayType)}</p>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <p className="text-sm font-semibold text-slate-950">
-                            {formatINR(getDayTotal(day))}
-                          </p>
-                          <ChevronDown
-                            className={`h-5 w-5 text-slate-500 transition ${
-                              expanded ? "rotate-180" : ""
-                            }`}
-                          />
-                        </div>
-                      </button>
-
-                      {expanded ? (
-                        <div className="border-t border-slate-200 px-4 py-4">
-                          <div className="space-y-3">
-                            <SummaryListRow label="Province" value={day.city || "Not selected"} />
-                            <SummaryListRow
-                              label="Hotel Stars"
-                              value={day.hotelCategory || "Not selected"}
-                            />
-                            <SummaryListRow
-                              label="Hotel"
-                              value={hotel?.name ?? "Not selected"}
-                            />
-                            <SummaryListRow
-                              label="Sightseeing"
-                              value={
-                                sightseeingNames.length
-                                  ? sightseeingNames.join(", ")
-                                  : "Not selected"
-                              }
-                            />
-                            <SummaryListRow
-                              label="Meals"
-                              value={mealNames.length ? mealNames.join(", ") : "Not selected"}
-                            />
-                            <SummaryListRow
-                              label="Transfer"
-                              value={
-                                transferNames.length
-                                  ? transferNames.join(", ")
-                                  : "Not selected"
-                              }
-                            />
-                            <SummaryListRow
-                              label="Extras"
-                              value={extraNames.length ? extraNames.join(", ") : "No extras"}
-                            />
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-
-                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-semibold text-slate-950">Trip-level extras</p>
-                  <p className="mt-2 text-sm text-slate-600">
-                    {selectedTripExtraIds.length
-                      ? selectedTripExtraIds
-                          .map((id) => tripLevelExtras.find((item) => item.id === id)?.label)
-                          .filter(Boolean)
-                          .join(", ")
-                      : "No trip-level extras selected"}
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur xl:hidden">
+          <div className="mx-auto max-w-md">
+            <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
+                    Day {activeDay.dayNumber}
+                  </p>
+                  <p className="mt-1 truncate text-sm font-semibold text-slate-950">
+                    {activeDay.city} · {formatDayType(activeDay.dayType)}
+                  </p>
+                  <p className="mt-1 truncate text-xs text-slate-500">
+                    {customTripDays.filter(isDayComplete).length}/{customTripDays.length} days complete
                   </p>
                 </div>
-              </div>
-            </div>
 
-            <div className="border-t border-slate-200 px-5 py-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                    Grand Total
-                  </p>
-                  <p className="mt-1 text-xl font-semibold text-slate-950">
+                <div className="shrink-0 text-right">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Total</p>
+                  <p className="mt-1 text-xl font-semibold leading-none text-slate-950">
                     {formatINR(pricing.grandTotal)}
                   </p>
                 </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={openSummary}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+                >
+                  Summary
+                </button>
 
                 <button
                   type="button"
-                  onClick={() => setSummaryOpen(false)}
-                  className="rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+                  disabled={!allDaysCompleted}
+                  className={`rounded-full px-4 py-3 text-sm font-semibold transition ${
+                    allDaysCompleted
+                      ? "bg-emerald-500 text-white"
+                      : "cursor-not-allowed bg-slate-200 text-slate-500"
+                  }`}
                 >
-                  Close
+                  Continue
                 </button>
               </div>
             </div>
           </div>
         </div>
+
+        {summaryOpen ? (
+          <div className="fixed inset-0 z-[120] bg-slate-950/55 p-4">
+            <div className="mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-[28px] bg-white shadow-[0_30px_80px_rgba(15,23,42,0.25)]">
+              <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
+                    Summary
+                  </p>
+                  <h3 className="mt-1 text-xl font-semibold text-slate-950">
+                    Day-wise trip selections
+                  </h3>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSummaryOpen(false)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-5 py-5">
+                <div className="space-y-4">
+                  {customTripDays.map((day) => {
+                    const expanded = expandedSummaryDayIds.includes(day.id);
+                    const hotel = hotels.find((item) => item.id === day.selectedHotelId);
+                    const transferNames = day.selectedTransferIds
+                      .map((id) => transfers.find((item) => item.id === id)?.name)
+                      .filter(Boolean) as string[];
+                    const sightseeingNames = day.selectedSightseeingIds
+                      .map((id) => sightseeing.find((item) => item.id === id)?.name)
+                      .filter(Boolean) as string[];
+                    const mealNames = day.selectedMealIds
+                      .map((id) => {
+                        const meal = meals.find((item) => item.id === id);
+                        if (!meal) return null;
+                        return `${meal.name} × ${totalPax}`;
+                      })
+                      .filter(Boolean) as string[];
+                    const extraNames = day.selectedExtraIds
+                      .map((id) => dayLevelExtras.find((item) => item.id === id)?.label)
+                      .filter(Boolean) as string[];
+
+                    return (
+                      <div
+                        key={day.id}
+                        className="overflow-hidden rounded-[24px] border border-slate-200 bg-white"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleSummaryDay(day.id)}
+                          className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-base font-semibold text-slate-950">
+                                Day {day.dayNumber} · {day.city}
+                              </p>
+                              <span
+                                className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                  isDayComplete(day)
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-amber-100 text-amber-700"
+                                }`}
+                              >
+                                {isDayComplete(day) ? "Complete" : "Pending"}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-sm text-slate-500">{formatDayType(day.dayType)}</p>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <p className="text-sm font-semibold text-slate-950">
+                              {formatINR(getDayTotal(day))}
+                            </p>
+                            <ChevronDown
+                              className={`h-5 w-5 text-slate-500 transition ${
+                                expanded ? "rotate-180" : ""
+                              }`}
+                            />
+                          </div>
+                        </button>
+
+                        {expanded ? (
+                          <div className="border-t border-slate-200 px-4 py-4">
+                            <div className="space-y-3">
+                              <SummaryListRow label="Province" value={day.city || "Not selected"} />
+                              <SummaryListRow
+                                label="Hotel Stars"
+                                value={day.hotelCategory || "Not selected"}
+                              />
+                              <SummaryListRow label="Hotel" value={hotel?.name ?? "Not selected"} />
+                              <SummaryListRow
+                                label="Sightseeing"
+                                value={
+                                  sightseeingNames.length
+                                    ? sightseeingNames.join(", ")
+                                    : "Not selected"
+                                }
+                              />
+                              <SummaryListRow
+                                label="Meals"
+                                value={mealNames.length ? mealNames.join(", ") : "Not selected"}
+                              />
+                              <SummaryListRow
+                                label="Transfer"
+                                value={
+                                  transferNames.length ? transferNames.join(", ") : "Not selected"
+                                }
+                              />
+                              <SummaryListRow
+                                label="Extras"
+                                value={extraNames.length ? extraNames.join(", ") : "No extras"}
+                              />
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-950">Trip-level extras</p>
+                    <p className="mt-2 text-sm text-slate-600">
+                      {selectedTripExtraIds.length
+                        ? selectedTripExtraIds
+                            .map((id) => tripLevelExtras.find((item) => item.id === id)?.label)
+                            .filter(Boolean)
+                            .join(", ")
+                        : "No trip-level extras selected"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-200 px-5 py-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                      Grand Total
+                    </p>
+                    <p className="mt-1 text-xl font-semibold text-slate-950">
+                      {formatINR(pricing.grandTotal)}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSummaryOpen(false)}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {showJumpToDays ? (
+        <button
+          type="button"
+          onClick={jumpToDaySelector}
+          className="fixed bottom-28 right-4 z-[90] inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 text-white shadow-[0_14px_30px_rgba(15,23,42,0.2)] transition hover:bg-slate-800 xl:bottom-8 xl:right-8"
+          aria-label="Jump to day selector"
+          title="Jump to day selector"
+        >
+          <ArrowUp className="h-5 w-5" />
+        </button>
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -1440,6 +1566,49 @@ function SectionCard({
         <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
       </div>
       <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function CollapsibleSectionCard({
+  title,
+  subtitle,
+  children,
+  price,
+  collapsed,
+  onToggle,
+}: {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+  price: number;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-start justify-between gap-4 text-left"
+      >
+        <div className="min-w-0">
+          <h3 className="text-lg font-semibold text-slate-950">{title}</h3>
+          <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="text-right">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Price</p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">{formatINR(price)}</p>
+          </div>
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-600">
+            <ChevronDown className={`h-5 w-5 transition ${collapsed ? "" : "rotate-180"}`} />
+          </span>
+        </div>
+      </button>
+
+      {!collapsed ? <div className="mt-5">{children}</div> : null}
     </section>
   );
 }
