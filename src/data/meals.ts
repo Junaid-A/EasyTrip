@@ -1,50 +1,110 @@
-export const meals = [
+export type MealType = "breakfast" | "lunch" | "dinner";
+export type MealPreference = "veg" | "non-veg" | "veg-jain" | "mixed";
+
+export type MealOption = {
+  id: string;
+  name: string;
+  mealType: MealType;
+  preference: MealPreference;
+  cuisine: string;
+  price: number;
+  description: string;
+  tags: string[];
+  image: string;
+  destinationIds: string[];
+  isActive: boolean;
+};
+
+export const meals: MealOption[] = [
   {
-    id: "meal-001",
-    name: "Daily Breakfast Plan",
-    type: "Veg & Non-Veg",
+    id: "meal-bkk-001",
+    name: "Hotel Breakfast Included",
+    mealType: "breakfast",
+    preference: "mixed",
+    cuisine: "International",
     price: 0,
-    mealTag: "Included",
-    description: "Standard breakfast included in most demo packages.",
+    description: "Daily breakfast served at hotel. Suitable for most travelers.",
+    tags: ["included", "easy", "hotel"],
+    image: "/images/meals/hotel-breakfast.jpg",
+    destinationIds: ["dest-bangkok"],
+    isActive: true,
   },
   {
-    id: "meal-002",
-    name: "Indian Veg Dinner Add-on",
-    type: "Veg",
+    id: "meal-bkk-002",
+    name: "Indian Veg Lunch",
+    mealType: "lunch",
+    preference: "veg",
+    cuisine: "Indian",
+    price: 1400,
+    description: "Comfort Indian veg lunch for travelers wanting familiar food.",
+    tags: ["veg", "indian", "comfort"],
+    image: "/images/meals/indian-veg-lunch.jpg",
+    destinationIds: ["dest-bangkok"],
+    isActive: true,
+  },
+  {
+    id: "meal-bkk-003",
+    name: "Jain Friendly Veg Lunch",
+    mealType: "lunch",
+    preference: "veg-jain",
+    cuisine: "Indian",
+    price: 1600,
+    description: "Simple Jain-friendly lunch option with lighter preparation.",
+    tags: ["jain", "veg", "indian"],
+    image: "/images/meals/jain-lunch.jpg",
+    destinationIds: ["dest-bangkok"],
+    isActive: true,
+  },
+  {
+    id: "meal-bkk-004",
+    name: "Thai Veg Dinner",
+    mealType: "dinner",
+    preference: "veg",
+    cuisine: "Thai",
     price: 1800,
-    mealTag: "Dinner",
-    description: "Comfort veg dinner option for travelers preferring Indian meals.",
+    description: "Vegetarian Thai dinner with curated local flavors.",
+    tags: ["veg", "thai", "dinner"],
+    image: "/images/meals/thai-veg-dinner.jpg",
+    destinationIds: ["dest-bangkok"],
+    isActive: true,
   },
   {
-    id: "meal-003",
-    name: "Indian Veg + Jain Friendly Dinner",
-    type: "Veg",
+    id: "meal-bkk-005",
+    name: "Indian Non-Veg Dinner",
+    mealType: "dinner",
+    preference: "non-veg",
+    cuisine: "Indian",
     price: 2200,
-    mealTag: "Dinner",
-    description: "Suitable for stricter veg preferences with simple meal options.",
+    description: "Popular Indian non-veg dinner option for couples and families.",
+    tags: ["non-veg", "indian", "popular"],
+    image: "/images/meals/indian-nonveg-dinner.jpg",
+    destinationIds: ["dest-bangkok"],
+    isActive: true,
   },
   {
-    id: "meal-004",
+    id: "meal-bkk-006",
     name: "Buffet Dinner Plan",
-    type: "Veg & Non-Veg",
+    mealType: "dinner",
+    preference: "mixed",
+    cuisine: "International",
     price: 2600,
-    mealTag: "Dinner",
-    description: "Flexible buffet plan with both veg and non-veg choices.",
+    description: "Wide buffet spread with both veg and non-veg selection.",
+    tags: ["buffet", "mixed", "family"],
+    image: "/images/meals/buffet-dinner.jpg",
+    destinationIds: ["dest-bangkok"],
+    isActive: true,
   },
   {
-    id: "meal-005",
-    name: "Lunch + Dinner Saver Combo",
-    type: "Veg & Non-Veg",
-    price: 3400,
-    mealTag: "Combo",
-    description: "Useful for families who want easier daily meal planning.",
-  },
-  {
-    id: "meal-006",
-    name: "Premium Romantic Dinner",
-    type: "Non-Veg",
+    id: "meal-bkk-007",
+    name: "Romantic Premium Dinner",
+    mealType: "dinner",
+    preference: "non-veg",
+    cuisine: "Premium Dining",
     price: 4200,
-    mealTag: "Premium",
-    description: "A premium dinner experience ideal for couples and special occasions.",
+    description: "Premium private dinner best suited for couples and honeymooners.",
+    tags: ["premium", "romantic", "couple"],
+    image: "/images/meals/romantic-dinner.jpg",
+    destinationIds: ["dest-bangkok"],
+    isActive: true,
   },
 ];

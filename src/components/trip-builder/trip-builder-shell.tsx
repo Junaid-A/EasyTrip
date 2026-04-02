@@ -1,24 +1,23 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays,
-  Check,
   ChevronRight,
   Filter,
   MapPin,
-  Minus,
   Plane,
-  Plus,
   Sparkles,
   Users,
   X,
+  Check,
 } from "lucide-react";
-import { AIGuidedFlow } from "./ai-guided-flow";
-import { CustomTripFlow } from "./custom-trip-flow";
-import { PublicHeader } from "@/components/public/public-header";
+
 import { PublicFooter } from "@/components/public/public-footer";
+import { PublicHeader } from "@/components/public/public-header";
+import { AIGuidedFlow } from "@/components/trip-builder/ai-guided-flow";
+import { CustomTripFlow } from "@/components/trip-builder/custom-trip-flow";
 import {
   categoryTabs,
   departureCities,
@@ -33,6 +32,13 @@ type PriceFilter = "all" | "upto-40" | "40-55" | "55-75" | "75-plus";
 type HotelFilter = "all" | "3 Star" | "4 Star";
 type FlightFilter = "all" | "with-flight" | "without-flight";
 type BuilderMode = "standard" | "ai" | "custom";
+
+type FamilyCard = {
+  representative: StandardPackage;
+  variants: StandardPackage[];
+  hasWithFlight: boolean;
+  hasWithoutFlight: boolean;
+};
 
 function formatINR(value: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -50,6 +56,7 @@ function getTomorrowISODate() {
 
 function formatLongDate(value: string) {
   if (!value) return "Not selected";
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
 
@@ -60,44 +67,67 @@ function formatLongDate(value: string) {
   }).format(date);
 }
 
-function clampMinimum(value: number, min: number) {
-  return Math.max(min, value);
+function getFlightAddOn(departureAirportCode: string, includedFlights: boolean) {
+  if (!includedFlights) return 0;
+
+  const flightMap: Record<string, number> = {
+    BLR: 16500,
+    BOM: 18500,
+    DEL: 21200,
+    HYD: 17200,
+    MAA: 16800,
+    CCU: 19800,
+    COK: 17500,
+    AMD: 18600,
+    PNQ: 17900,
+    GOX: 17100,
+    JAI: 19400,
+    LKO: 20100,
+    IXC: 20500,
+    IDR: 18700,
+    NAG: 18400,
+    VTZ: 17700,
+    CJB: 16900,
+    TRV: 17600,
+    BBI: 18800,
+    GAU: 21400,
+  };
+
+  return flightMap[departureAirportCode] ?? 18200;
 }
 
-function getTotalTravellers(adults: number, children: number) {
-  return adults + children;
-}
+function calculatePackagePrice(params: {
+  pkg: StandardPackage;
+  adults: number;
+  children: number;
+  rooms: number;
+  departureAirportCode: string;
+  includedFlights: boolean;
+}) {
+  const { pkg, adults, children, rooms, departureAirportCode, includedFlights } = params;
 
-function calculatePackagePrice(
-  pkg: StandardPackage,
-  adults: number,
-  children: number,
-  rooms: number,
-  flightSelectionValue: 0 | 1
-) {
   const adultTotal = pkg.basePricePerPerson * adults;
   const childTotal = Math.round(pkg.basePricePerPerson * 0.72 * children);
   const roomAdjustment = Math.max(0, rooms - 1) * 3500;
+  const flightTotal = getFlightAddOn(departureAirportCode, includedFlights) * (adults + children);
   const serviceFee = Math.max(
     3000,
-    Math.round((adultTotal + childTotal + roomAdjustment) * 0.05)
+    Math.round((adultTotal + childTotal + roomAdjustment + flightTotal) * 0.05)
   );
 
-  const total =
-    adultTotal + childTotal + roomAdjustment + serviceFee + flightSelectionValue;
+  const total = adultTotal + childTotal + roomAdjustment + flightTotal + serviceFee;
 
   return {
-    pricePerPerson: pkg.basePricePerPerson,
+    pricePerPerson:
+      pkg.basePricePerPerson +
+      (includedFlights ? getFlightAddOn(departureAirportCode, true) : 0),
     totalPrice: Math.round(total),
     serviceFee,
-    flightSelectionValue,
+    flightTotal,
   };
 }
 
-function buildSegments(
-  citySplit: StandardPackage["citySplit"],
-  departureDate: string
-) {
+function buildSegments(citySplit: StandardPackage["citySplit"], departureDate: string) {
   const segments: Array<{
     id: string;
     city: string;
@@ -130,23 +160,18 @@ function buildSegments(
   return segments;
 }
 
-function buildStorePricingBreakdown(
-  totalPrice: number,
-  serviceFee: number,
-  flightSelectionValue: 0 | 1
-) {
-  const subtotal = Math.max(totalPrice - serviceFee - flightSelectionValue, 0);
+function buildStorePricingBreakdown(totalPrice: number, serviceFee: number, flightTotal: number) {
+  const subtotal = Math.max(totalPrice - serviceFee - flightTotal, 0);
 
   const hotelTotal = Math.round(subtotal * 0.46);
   const transferTotal = Math.round(subtotal * 0.1);
   const sightseeingTotal = Math.round(subtotal * 0.14);
   const mealsTotal = Math.round(subtotal * 0.08);
-  const basePackage =
-    subtotal - hotelTotal - transferTotal - sightseeingTotal - mealsTotal;
+  const basePackage = subtotal - hotelTotal - transferTotal - sightseeingTotal - mealsTotal;
 
   return {
     basePackage,
-    flightTotal: flightSelectionValue,
+    flightTotal,
     hotelTotal,
     transferTotal,
     sightseeingTotal,
@@ -197,6 +222,23 @@ export function TripBuilderShell() {
   const selectPackage = useTripBuilderStore((state) => state.selectPackage);
   const setTotals = useTripBuilderStore((state) => state.setTotals);
   const setDayPlans = useTripBuilderStore((state) => state.setDayPlans);
+  const setSelectedMode = useTripBuilderStore((state) => state.setSelectedMode);
+  const setBudget = useTripBuilderStore((state) => state.setBudget);
+  const setMood = useTripBuilderStore((state) => state.setMood);
+  const setTravelStyle = useTripBuilderStore((state) => state.setTravelStyle);
+  const setTravellingWith = useTripBuilderStore((state) => state.setTravellingWith);
+  const setPriority = useTripBuilderStore((state) => state.setPriority);
+  const setSpecialRequest = useTripBuilderStore((state) => state.setSpecialRequest);
+  const setAiPrompt = useTripBuilderStore((state) => state.setAiPrompt);
+  const addAiChatMessage = useTripBuilderStore((state) => state.addAiChatMessage);
+  const resetAiChat = useTripBuilderStore((state) => state.resetAiChat);
+  const dayPlans = useTripBuilderStore((state) => state.dayPlans);
+  const initializeCustomTripDays = useTripBuilderStore(
+    (state) => state.initializeCustomTripDays
+  );
+  const selectedPackageTitleFromStore = useTripBuilderStore(
+    (state) => state.selectedPackageTitle
+  );
 
   const [mode, setMode] = useState<BuilderMode>("standard");
   const [activeCategory, setActiveCategory] = useState<PackageCategory>("all");
@@ -218,6 +260,9 @@ export function TripBuilderShell() {
   const [customSeedPackageId, setCustomSeedPackageId] = useState<string | null>(null);
 
   const [flightModalFamilyId, setFlightModalFamilyId] = useState<string | null>(null);
+  const [pendingPackageSource, setPendingPackageSource] = useState<"standard" | "ai">(
+    "standard"
+  );
 
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -225,12 +270,15 @@ export function TripBuilderShell() {
   const selectedDepartureCity =
     departureCities.find((item) => item.id === departureCityId) ?? departureCities[0];
 
-  const totalTravellers = getTotalTravellers(adults, children);
+  useEffect(() => {
+    if (mode === "custom") {
+      initializeCustomTripDays(dayPlans);
+    }
+  }, [mode, dayPlans, initializeCustomTripDays]);
 
   const filteredVariants = useMemo(() => {
     return standardPackages.filter((pkg) => {
-      const categoryMatch =
-        activeCategory === "all" ? true : pkg.category.includes(activeCategory);
+      const categoryMatch = activeCategory === "all" ? true : pkg.category.includes(activeCategory);
 
       return (
         categoryMatch &&
@@ -242,14 +290,12 @@ export function TripBuilderShell() {
     });
   }, [activeCategory, hotelFilter, durationFilter, priceFilter, flightFilter]);
 
-  const familyCards = useMemo(() => {
+  const familyCards = useMemo<FamilyCard[]>(() => {
     const familyIds = [...new Set(filteredVariants.map((pkg) => pkg.packageFamilyId))];
 
     return familyIds
       .map((familyId) => {
-        const familyVariants = standardPackages.filter(
-          (pkg) => pkg.packageFamilyId === familyId
-        );
+        const familyVariants = standardPackages.filter((pkg) => pkg.packageFamilyId === familyId);
 
         const preferred =
           familyVariants.find(
@@ -291,19 +337,80 @@ export function TripBuilderShell() {
 
   const flightModalFamily =
     flightModalFamilyId != null
-      ? familyCards.find((item) => item.representative.packageFamilyId === flightModalFamilyId) ??
-        null
+      ? familyCards.find(
+          (item) => item.representative.packageFamilyId === flightModalFamilyId
+        ) ?? null
       : null;
 
-  function syncPackageToStore(pkg: StandardPackage, flightSelectionValue: 0 | 1) {
+  const selectedPackageSummaryTotal = selectedPackage
+    ? calculatePackagePrice({
+        pkg: selectedPackage,
+        adults,
+        children,
+        rooms,
+        departureAirportCode: selectedDepartureCity.airportCode,
+        includedFlights: selectedPackage.includedFlights,
+      }).totalPrice
+    : null;
+
+  const categoryCounts = useMemo(() => {
+    return categoryTabs.reduce<Record<string, number>>((acc, tab) => {
+      if (tab.value === "all") {
+        acc[tab.value] = [...new Set(standardPackages.map((pkg) => pkg.packageFamilyId))]
+          .length;
+      } else {
+        acc[tab.value] = [
+          ...new Set(
+            standardPackages
+              .filter((pkg) => pkg.category.includes(tab.value))
+              .map((pkg) => pkg.packageFamilyId)
+          ),
+        ].length;
+      }
+      return acc;
+    }, {});
+  }, []);
+
+  function syncPackageToStore(pkg: StandardPackage, includedFlights: boolean) {
     const segments = buildSegments(pkg.citySplit, departureDate);
     const endDate = segments.at(-1)?.checkOut ?? departureDate;
-    const priced = calculatePackagePrice(pkg, adults, children, rooms, flightSelectionValue);
+
+    const priced = calculatePackagePrice({
+      pkg,
+      adults,
+      children,
+      rooms,
+      departureAirportCode: selectedDepartureCity.airportCode,
+      includedFlights,
+    });
+
     const pricing = buildStorePricingBreakdown(
       priced.totalPrice,
       priced.serviceFee,
-      flightSelectionValue
+      priced.flightTotal
     );
+
+    const derivedBudget =
+      priced.pricePerPerson <= 40000
+        ? "Comfort"
+        : priced.pricePerPerson <= 65000
+        ? "Premium"
+        : "Luxury";
+
+    const derivedMood =
+      activeCategory === "honeymoon"
+        ? "Romantic"
+        : activeCategory === "family"
+        ? "Family Fun"
+        : activeCategory === "beach"
+        ? "Relaxed"
+        : "Balanced";
+
+    const derivedTravelStyle =
+      pkg.hotelCategory === "4 Star" ? "Easy & Comfortable" : "Balanced";
+
+    const travellingWith =
+      adults >= 2 && children === 0 ? "Couple" : children > 0 ? "Family" : "Group";
 
     setTripDetails({
       selectedMode: mode,
@@ -312,25 +419,20 @@ export function TripBuilderShell() {
       segments,
       travelDates: `${formatLongDate(departureDate)} - ${formatLongDate(endDate)}`,
       nights: `${pkg.durationNights} Nights`,
-      budget:
-        pkg.basePricePerPerson <= 40000
-          ? "Comfort"
-          : pkg.basePricePerPerson <= 55000
-          ? "Premium"
-          : "Luxury",
-      travelStyle:
-        activeCategory === "honeymoon"
-          ? "Luxury"
-          : activeCategory === "family"
-          ? "Family Fun"
-          : activeCategory === "beach"
-          ? "Relaxed"
-          : "Mixed",
-      travellingWith:
-        adults >= 2 && children === 0 ? "Couple" : children > 0 ? "Family" : "Group",
+      budget: derivedBudget,
+      mood: derivedMood,
+      travelStyle: derivedTravelStyle,
+      travellingWith,
       priority: pkg.hotelCategory === "4 Star" ? "Better hotel" : "Balanced trip",
       serviceFee: priced.serviceFee,
     });
+
+    setSelectedMode(mode);
+    setBudget(derivedBudget);
+    setMood(derivedMood);
+    setTravelStyle(derivedTravelStyle);
+    setTravellingWith(travellingWith);
+    setPriority(pkg.hotelCategory === "4 Star" ? "Better hotel" : "Balanced trip");
 
     setTravelers({ adults, children, rooms });
     setDayPlans(pkg.dayPlan);
@@ -339,8 +441,8 @@ export function TripBuilderShell() {
       selectedPackageId: pkg.id,
       selectedPackageTitle: pkg.title,
       selectedPackagePrice: pricing.basePackage,
-      selectedFlightMode: flightSelectionValue,
-      selectedFlightLabel: flightSelectionValue === 1 ? "With Flight" : "Without Flight",
+      selectedFlightMode: includedFlights ? 1 : 0,
+      selectedFlightLabel: includedFlights ? "With Flight" : "Without Flight",
     });
 
     setTotals({
@@ -353,27 +455,30 @@ export function TripBuilderShell() {
     });
   }
 
-  function openFlightChoice(familyId: string) {
+  function openFlightChoice(familyId: string, source: "standard" | "ai" = "standard") {
+    setPendingPackageSource(source);
     setFlightModalFamilyId(familyId);
   }
 
-  function handleChooseFlightOption(flightSelectionValue: 0 | 1) {
+  function handleChooseFlightOption(includedFlights: boolean) {
     if (!flightModalFamily) return;
 
     const chosen =
       flightModalFamily.variants.find(
         (pkg) =>
-          pkg.includedFlights === (flightSelectionValue === 1) &&
+          pkg.includedFlights === includedFlights &&
           (hotelFilter === "all" ? true : pkg.hotelCategory === hotelFilter)
       ) ??
-      flightModalFamily.variants.find(
-        (pkg) => pkg.includedFlights === (flightSelectionValue === 1)
-      ) ??
+      flightModalFamily.variants.find((pkg) => pkg.includedFlights === includedFlights) ??
       flightModalFamily.representative;
 
     setSelectedPackageId(chosen.id);
-    syncPackageToStore(chosen, flightSelectionValue);
+    syncPackageToStore(chosen, includedFlights);
     setFlightModalFamilyId(null);
+
+    if (pendingPackageSource === "ai") {
+      setMode("standard");
+    }
   }
 
   function handleOpenDetail(packageId: string) {
@@ -389,7 +494,7 @@ export function TripBuilderShell() {
 
     setSelectedPackageId(pkg.id);
     setCustomSeedPackageId(pkg.id);
-    syncPackageToStore(pkg, pkg.includedFlights ? 1 : 0);
+    syncPackageToStore(pkg, pkg.includedFlights);
     setMode("custom");
     setDetailPackageId(null);
   }
@@ -407,38 +512,28 @@ export function TripBuilderShell() {
     setActiveCategory("all");
   }
 
-  const categoryCounts = useMemo(() => {
-    return categoryTabs.reduce<Record<string, number>>((acc, tab) => {
-      if (tab.value === "all") {
-        acc[tab.value] = [...new Set(standardPackages.map((pkg) => pkg.packageFamilyId))].length;
-      } else {
-        acc[tab.value] = [
-          ...new Set(
-            standardPackages
-              .filter((pkg) => pkg.category.includes(tab.value))
-              .map((pkg) => pkg.packageFamilyId)
-          ),
-        ].length;
-      }
-      return acc;
-    }, {});
-  }, []);
+  function handleAiPromptCommit(
+    prompt: string,
+    meta?: { mood?: string; budget?: string; priority?: string }
+  ) {
+    setAiPrompt(prompt);
+    addAiChatMessage({
+      id: `user-${Date.now()}`,
+      role: "user",
+      text: prompt,
+    });
 
-  const selectedPackageSummaryTotal = selectedPackage
-    ? calculatePackagePrice(
-        selectedPackage,
-        adults,
-        children,
-        rooms,
-        selectedPackage.includedFlights ? 1 : 0
-      ).totalPrice
-    : null;
+    if (meta?.mood) setMood(meta.mood);
+    if (meta?.budget) setBudget(meta.budget);
+    if (meta?.priority) setPriority(meta.priority);
+    if (meta?.mood) setSpecialRequest(meta.mood);
+  }
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#f7f3ee_0%,#f8fafc_48%,#ffffff_100%)] text-slate-950">
       {!mobileSearchOpen && !mobileFiltersOpen ? <PublicHeader /> : null}
 
-      <main className="pb-32 pt-24 sm:pt-28 lg:pt-36">
+      <main className="pb-40 pt-24 sm:pt-28 lg:pt-36">
         <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="hidden overflow-hidden rounded-[36px] border border-black/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.94)_0%,rgba(254,247,237,0.9)_52%,rgba(255,255,255,0.95)_100%)] shadow-[0_24px_80px_rgba(15,23,42,0.08)] lg:block">
             <div className="border-b border-black/5 px-8 py-8">
@@ -447,10 +542,12 @@ export function TripBuilderShell() {
                   Thailand Planner
                 </span>
                 <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950">
-                  Cleaner package cards, better filters, and one flight choice before the next step.
+                  Standard, AI Assist, and fully custom trip planning in one smooth flow.
                 </h1>
                 <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-                  Standard packages stay simple. Once a customer wants edits, move them into Custom.
+                  AI Assist now works like a guided planning chat mockup with prompt chips and
+                  Surprise Me recommendations. Flights are still asked only once when selecting a
+                  package.
                 </p>
               </div>
             </div>
@@ -505,12 +602,12 @@ export function TripBuilderShell() {
           </div>
 
           <div className="lg:hidden">
-            <div className="rounded-[22px] border border-black/10 bg-white p-2.5 shadow-[0_10px_28px_rgba(15,23,42,0.06)]">
+            <div className="rounded-[20px] border border-black/10 bg-white p-2 shadow-[0_8px_22px_rgba(15,23,42,0.05)]">
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => setMobileSearchOpen(true)}
-                  className="min-w-0 flex-1 rounded-[18px] bg-slate-50 px-4 py-3 text-left"
+                  className="min-w-0 flex-1 rounded-[16px] bg-slate-50 px-4 py-2.5 text-left"
                 >
                   <p className="truncate text-[15px] font-semibold text-slate-950">
                     {selectedDepartureCity.city} → {destinationCity}
@@ -525,7 +622,7 @@ export function TripBuilderShell() {
                 <button
                   type="button"
                   onClick={() => setMobileFiltersOpen(true)}
-                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] border border-slate-200 bg-white text-slate-700"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-slate-200 bg-white text-slate-700"
                 >
                   <Filter className="h-4 w-4" />
                 </button>
@@ -533,25 +630,25 @@ export function TripBuilderShell() {
             </div>
           </div>
 
-          <div className="mt-3 grid gap-2 md:grid-cols-3">
-            <ModeCard
+          <div className="-mx-1 mt-4 flex gap-3 overflow-x-auto px-1 pb-1 sm:justify-center sm:overflow-visible">
+            <ModeCircle
               active={mode === "standard"}
               title="Standard"
-              description="Ready packages"
+              subtitle="Ready"
               onClick={() => setMode("standard")}
               icon={<MapPin className="h-5 w-5" />}
             />
-            <ModeCard
+            <ModeCircle
               active={mode === "ai"}
               title="AI Assist"
-              description="Guided help"
+              subtitle="Guided"
               onClick={() => setMode("ai")}
               icon={<Sparkles className="h-5 w-5" />}
             />
-            <ModeCard
+            <ModeCircle
               active={mode === "custom"}
               title="Custom"
-              description="Full control"
+              subtitle="Control"
               onClick={() => setMode("custom")}
               icon={<ChevronRight className="h-5 w-5" />}
             />
@@ -567,6 +664,10 @@ export function TripBuilderShell() {
                         <h2 className="text-xl font-semibold text-slate-950 sm:text-2xl">
                           Standard Thailand packages
                         </h2>
+                        <p className="mt-1 text-sm text-slate-600">
+                          Clean package cards. Flight decision is asked only once when you choose a
+                          package.
+                        </p>
                       </div>
 
                       <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 sm:inline-flex">
@@ -597,27 +698,38 @@ export function TripBuilderShell() {
                     </div>
                   </div>
 
-                  <div className="mt-3 rounded-[18px] border border-orange-100 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_100%)] px-4 py-2.5">
+                  <div className="mt-3 rounded-[18px] border border-orange-100 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_100%)] px-4 py-3">
                     <p className="break-words text-sm font-semibold text-slate-900">
-                      Departing from {selectedDepartureCity.city} · {selectedDepartureCity.airportCode}
+                      Departing from {selectedDepartureCity.city} ·{" "}
+                      {selectedDepartureCity.airportCode}
                     </p>
                     <p className="mt-1 break-words text-sm text-slate-600">
-                      Flight is asked only once when selecting the package.
+                      Same departure details are also carried into AI Assist and Surprise Me.
                     </p>
                   </div>
 
                   <div className="mt-4 grid min-w-0 gap-5 lg:grid-cols-2">
-                    {familyCards.map(({ representative, hasWithFlight, hasWithoutFlight }) => {
+                    {familyCards.map(({ representative }) => {
                       const isSelected =
                         selectedPackage?.packageFamilyId === representative.packageFamilyId;
 
-                      const examplePrice = calculatePackagePrice(
-                        representative,
+                      const examplePriceWithoutFlight = calculatePackagePrice({
+                        pkg: representative,
                         adults,
                         children,
                         rooms,
-                        0
-                      );
+                        departureAirportCode: selectedDepartureCity.airportCode,
+                        includedFlights: false,
+                      });
+
+                      const examplePriceWithFlight = calculatePackagePrice({
+                        pkg: representative,
+                        adults,
+                        children,
+                        rooms,
+                        departureAirportCode: selectedDepartureCity.airportCode,
+                        includedFlights: true,
+                      });
 
                       return (
                         <article
@@ -628,16 +740,13 @@ export function TripBuilderShell() {
                               : "border-slate-200 shadow-[0_14px_30px_rgba(15,23,42,0.07)]"
                           }`}
                         >
-                          <div className="relative h-40 overflow-hidden">
+                          <div className="relative h-44 overflow-hidden">
                             <img
-                              src={
-                                representative.image ||
-                                "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1400&q=80"
-                              }
+                              src={representative.image}
                               alt={representative.title}
                               className="h-full w-full object-cover"
                             />
-                            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.02)_0%,rgba(15,23,42,0.18)_100%)]" />
+                            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.02)_0%,rgba(15,23,42,0.28)_100%)]" />
                             <div className="absolute left-4 top-4 rounded-full bg-white/95 px-4 py-1.5 text-xs font-semibold text-slate-900">
                               {representative.badge}
                             </div>
@@ -648,10 +757,10 @@ export function TripBuilderShell() {
                             ) : null}
                           </div>
 
-                          <div className="px-4 pb-4 pt-3.5">
+                          <div className="px-4 pb-4 pt-3">
                             <div className="flex items-start justify-between gap-4">
                               <div className="min-w-0 flex-1">
-                                <h3 className="text-[1.6rem] font-semibold leading-[1.12] tracking-tight text-slate-950">
+                                <h3 className="text-[1.5rem] font-semibold leading-[1.08] tracking-tight text-slate-950 sm:text-[1.6rem]">
                                   {representative.title}
                                 </h3>
                               </div>
@@ -661,13 +770,13 @@ export function TripBuilderShell() {
                                   From
                                 </p>
                                 <p className="mt-1 text-3xl font-semibold leading-none text-slate-950">
-                                  {formatINR(examplePrice.pricePerPerson)}
+                                  {formatINR(examplePriceWithoutFlight.pricePerPerson)}
                                 </p>
                                 <p className="mt-1 text-sm text-slate-500">/ person</p>
                               </div>
                             </div>
 
-                            <div className="mt-2.5 text-lg text-slate-700">
+                            <div className="mt-2 text-lg text-slate-700">
                               {representative.citySplit.map((item, index) => (
                                 <span key={`${representative.id}-${item.city}`}>
                                   <span className="font-semibold">{item.nights}N</span>{" "}
@@ -677,54 +786,48 @@ export function TripBuilderShell() {
                               ))}
                             </div>
 
-                            <div className="mt-3 border-t border-slate-200" />
+                            <div className="mt-3 border-t border-slate-200 pt-4">
+                              <div className="flex flex-wrap gap-3">
+                                <div className="inline-flex min-w-[190px] items-center justify-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-5 py-3 text-base font-semibold text-orange-700">
+                                  <Sparkles className="h-4 w-4" />
+                                  {representative.activitiesCount} activities
+                                </div>
 
-                            <div className="mt-3 grid grid-cols-2 gap-x-5 gap-y-1.5 text-base text-slate-700">
-                              <CompactPointer
-                                text={
-                                  <>
-                                    <strong>{representative.durationNights}N</strong> /{" "}
-                                    <strong>{representative.durationDays}D</strong>
-                                  </>
-                                }
-                              />
-                              <CompactPointer text={<strong>{representative.hotelCategory}</strong>} />
-                              <CompactPointer
-                                text={
-                                  <>
-                                    <strong>{representative.activitiesCount}</strong> activities
-                                  </>
-                                }
-                              />
-                              <CompactPointer
-                                text={
-                                  hasWithFlight && hasWithoutFlight
-                                    ? "With / without flight options"
-                                    : hasWithFlight
-                                    ? "With flight available"
-                                    : "Without flight available"
-                                }
-                              />
+                                <div className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-700">
+                                  {representative.durationNights}N /{" "}
+                                  {representative.durationDays}D
+                                </div>
+                              </div>
                             </div>
 
-                            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2.5 text-[15px]">
+                            <div className="mt-4 grid gap-3 text-[15px]">
                               <IncludeTick text={representative.transferType} />
                               <IncludeTick text={representative.mealsLabel} />
                               <IncludeTick text={`${representative.hotelCategory} stay`} />
                               <IncludeTick text="Customization available next" />
                             </div>
 
-                            <div className="mt-4 rounded-[20px] bg-[#e5e7eb] px-4 py-3.5">
-                              <div className="flex items-end justify-between gap-3">
-                                <div>
-                                  <p className="text-sm text-slate-500">Trip Total</p>
-                                  <p className="mt-1 text-2xl font-semibold leading-none text-slate-950">
-                                    {formatINR(examplePrice.totalPrice)}
+                            <div className="mt-4 rounded-[20px] bg-[#dfe3e8] px-4 py-4">
+                              <p className="text-sm text-slate-500">Trip Total</p>
+
+                              <div className="mt-3 grid grid-cols-2 gap-3">
+                                <div className="rounded-2xl bg-white/70 px-3 py-3">
+                                  <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                                    Without flight
+                                  </p>
+                                  <p className="mt-2 text-2xl font-semibold leading-none text-slate-950">
+                                    {formatINR(examplePriceWithoutFlight.totalPrice)}
                                   </p>
                                 </div>
-                                <p className="text-xs text-slate-500">
-                                  Per person shown above
-                                </p>
+
+                                <div className="rounded-2xl bg-white/70 px-3 py-3">
+                                  <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                                    With flight
+                                  </p>
+                                  <p className="mt-2 text-2xl font-semibold leading-none text-slate-950">
+                                    {formatINR(examplePriceWithFlight.totalPrice)}
+                                  </p>
+                                </div>
                               </div>
                             </div>
 
@@ -739,7 +842,12 @@ export function TripBuilderShell() {
                             <div className="mt-3 grid grid-cols-2 gap-3">
                               <button
                                 type="button"
-                                onClick={() => openFlightChoice(representative.packageFamilyId)}
+                                onClick={() =>
+                                  openFlightChoice(
+                                    representative.packageFamilyId,
+                                    "standard"
+                                  )
+                                }
                                 className="rounded-full bg-slate-950 px-4 py-3.5 text-base font-semibold text-white transition hover:bg-slate-800"
                               >
                                 Choose package
@@ -747,7 +855,12 @@ export function TripBuilderShell() {
 
                               <button
                                 type="button"
-                                onClick={() => handleCustomizePackage(representative.id)}
+                                onClick={() =>
+                                  openFlightChoice(
+                                    representative.packageFamilyId,
+                                    "standard"
+                                  )
+                                }
                                 className="rounded-full border border-orange-200 bg-orange-50 px-4 py-3.5 text-base font-semibold text-orange-700 transition hover:bg-orange-100"
                               >
                                 Customize
@@ -801,6 +914,11 @@ export function TripBuilderShell() {
                           .map((item) => `${item.nights}N ${item.city}`)
                           .join(" · ")}
                       </p>
+                      <p className="mt-3 text-xl font-semibold text-slate-950">
+                        {selectedPackageSummaryTotal
+                          ? formatINR(selectedPackageSummaryTotal)
+                          : "—"}
+                      </p>
                     </div>
                   ) : (
                     <div className="mt-4 rounded-[24px] border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
@@ -825,29 +943,90 @@ export function TripBuilderShell() {
             </div>
           )}
 
+          {mode === "standard" && selectedPackage ? (
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur xl:hidden">
+              <div className="mx-auto max-w-md">
+                <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
+                        Booking Summary
+                      </p>
+                      <p className="mt-1 truncate text-sm font-semibold text-slate-950">
+                        {selectedPackage.title}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-slate-500">
+                        {selectedPackage.citySplit
+                          .map((item) => `${item.nights}N ${item.city}`)
+                          .join(" · ")}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                        Total
+                      </p>
+                      <p className="mt-1 text-xl font-semibold leading-none text-slate-950">
+                        {selectedPackageSummaryTotal
+                          ? formatINR(selectedPackageSummaryTotal)
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleContinueBooking}
+                    className="mt-4 w-full rounded-full bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  >
+                    Continue booking
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {mode === "ai" && (
-            <section className="mt-6 rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.05)]">
-              <AIGuidedFlow />
+            <section className="mt-6">
+              <AIGuidedFlow
+                departureCityLabel={`${selectedDepartureCity.city} · ${selectedDepartureCity.airportCode}`}
+                departureDate={departureDate}
+                destinationCity={destinationCity}
+                adults={adults}
+                children={children}
+                rooms={rooms}
+                onResetConversation={() => resetAiChat()}
+              />
             </section>
           )}
 
           {mode === "custom" && (
-            <section className="mt-6 rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.05)]">
-              <div className="mb-5 rounded-[26px] border border-orange-200 bg-orange-50 p-4">
-                <p className="text-sm font-semibold text-orange-700">Custom mode enabled</p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Build city-night splits like 2N Bangkok · 2N Krabi · 2N Pattaya and edit day-level
-                  items more neatly.
+            <section className="mt-6 space-y-4">
+              <div className="rounded-[28px] border border-orange-200 bg-orange-50 p-5">
+                <p className="text-sm font-semibold text-orange-700">
+                  Custom Trip Studio enabled
                 </p>
-                {customSeedPackageId ? (
+                <p className="mt-1 text-sm text-slate-600">
+                  Full control is now day-wise. Customers can edit hotel quality, choose
+                  daily transfers, filter sightseeing by timing, select meals, add extras,
+                  and review live pricing.
+                </p>
+
+                {customSeedPackageId || selectedPackageTitleFromStore ? (
                   <p className="mt-2 text-sm text-slate-700">
                     Starting from package:{" "}
                     <span className="font-semibold">
-                      {standardPackages.find((pkg) => pkg.id === customSeedPackageId)?.title ??
+                      {standardPackages.find((pkg) => pkg.id === customSeedPackageId)
+                        ?.title ??
+                        selectedPackageTitleFromStore ??
                         "Selected package"}
                     </span>
                   </p>
-                ) : null}
+                ) : (
+                  <p className="mt-2 text-sm text-slate-700">
+                    Starting from scratch. You can build the trip day by day.
+                  </p>
+                )}
               </div>
 
               <CustomTripFlow />
@@ -855,6 +1034,45 @@ export function TripBuilderShell() {
           )}
         </section>
       </main>
+
+      {detailPackage ? (
+        <PackageDetailModal
+          pkg={detailPackage}
+          departureAirportCode={selectedDepartureCity.airportCode}
+          adults={adults}
+          children={children}
+          rooms={rooms}
+          onClose={() => setDetailPackageId(null)}
+          onChoose={() => {
+            setSelectedPackageId(detailPackage.id);
+            syncPackageToStore(detailPackage, detailPackage.includedFlights);
+            setDetailPackageId(null);
+            router.push("/results");
+          }}
+          onCustomize={() => handleCustomizePackage(detailPackage.id)}
+        />
+      ) : null}
+
+      {flightModalFamily ? (
+        <FlightChoiceModal
+          family={flightModalFamily}
+          departureCityLabel={`${selectedDepartureCity.city} · ${selectedDepartureCity.airportCode}`}
+          onClose={() => setFlightModalFamilyId(null)}
+          onChoose={(includedFlights) => handleChooseFlightOption(includedFlights)}
+          onCustomize={(includedFlights) => {
+            const chosen =
+              flightModalFamily.variants.find(
+                (pkg) => pkg.includedFlights === includedFlights
+              ) ?? flightModalFamily.representative;
+
+            setSelectedPackageId(chosen.id);
+            syncPackageToStore(chosen, includedFlights);
+            setCustomSeedPackageId(chosen.id);
+            setMode("custom");
+            setFlightModalFamilyId(null);
+          }}
+        />
+      ) : null}
 
       {mobileSearchOpen ? (
         <div className="fixed inset-0 z-[90] overflow-x-hidden bg-white lg:hidden">
@@ -1024,268 +1242,48 @@ export function TripBuilderShell() {
         </div>
       ) : null}
 
-      {flightModalFamily ? (
-        <div className="fixed inset-0 z-[95] bg-slate-950/55 px-4 py-8 backdrop-blur-sm">
-          <div className="mx-auto max-w-2xl rounded-[32px] bg-white p-5 shadow-2xl sm:p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-600">
-                  Flight Option
-                </p>
-                <h3 className="mt-2 text-2xl font-semibold text-slate-950">
-                  {flightModalFamily.representative.title}
-                </h3>
-                <p className="mt-2 text-sm text-slate-600">
-                  Choose flight mode once. This is added to billing as{" "}
-                  <span className="font-semibold text-slate-950">1</span> or{" "}
-                  <span className="font-semibold text-slate-950">0</span>.
-                </p>
-              </div>
+      <PublicFooter />
+    </div>
+  );
+}
 
-              <button
-                type="button"
-                onClick={() => setFlightModalFamilyId(null)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => handleChooseFlightOption(1)}
-                className="rounded-[24px] border border-sky-200 bg-sky-50 p-5 text-left transition hover:border-sky-300 hover:bg-sky-100"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-sky-700">
-                    <Plane className="h-3.5 w-3.5" />
-                    With Flight
-                  </div>
-                  <div className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white">
-                    1
-                  </div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleChooseFlightOption(0)}
-                className="rounded-[24px] border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-slate-300 hover:bg-slate-100"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                    <Plane className="h-3.5 w-3.5" />
-                    Without Flight
-                  </div>
-                  <div className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white">
-                    0
-                  </div>
-                </div>
-              </button>
-            </div>
-          </div>
+function ModeCircle({
+  active,
+  title,
+  subtitle,
+  onClick,
+  icon,
+}: {
+  active: boolean;
+  title: string;
+  subtitle: string;
+  onClick: () => void;
+  icon: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group shrink-0 rounded-full border px-4 py-3 transition ${
+        active
+          ? "border-orange-300 bg-orange-50 text-orange-700 shadow-[0_10px_25px_rgba(249,115,22,0.18)]"
+          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className={`flex h-10 w-10 items-center justify-center rounded-full ${
+            active ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-700"
+          }`}
+        >
+          {icon}
         </div>
-      ) : null}
-
-      {detailPackage ? (
-        <div className="fixed inset-0 z-50 bg-slate-950/50 px-2 pb-2 pt-8 backdrop-blur-sm sm:p-4">
-          <div className="mx-auto flex h-full max-w-[94vw] flex-col overflow-hidden rounded-[24px] bg-white shadow-2xl sm:max-w-5xl sm:rounded-[32px]">
-            <div className="flex items-start justify-between border-b border-slate-200 px-4 py-4 sm:px-6 sm:py-5">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-orange-600">
-                  Standard Package Detail
-                </p>
-                <h2 className="mt-2 text-xl font-semibold text-slate-950 sm:text-2xl">
-                  {detailPackage.title}
-                </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  {detailPackage.citySplit
-                    .map((item) => `${item.nights}N ${item.city}`)
-                    .join(" · ")}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDetailPackageId(null)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
-                <div className="overflow-hidden rounded-[28px]">
-                  <img
-                    src={detailPackage.image}
-                    alt={detailPackage.title}
-                    className="h-64 w-full object-cover"
-                  />
-                </div>
-
-                <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                  <DetailInfoCard label="Hotel" value={detailPackage.hotelCategory} />
-                  <DetailInfoCard label="Transfers" value={detailPackage.transferType} />
-                  <DetailInfoCard
-                    label="Flight Mode"
-                    value={detailPackage.includedFlights ? "With Flight" : "Without Flight"}
-                  />
-                </div>
-
-                <div className="mt-6">
-                  <p className="text-lg font-semibold text-slate-950">Day-wise itinerary</p>
-
-                  <div className="mt-5 space-y-4">
-                    {detailPackage.dayPlan.map((item) => (
-                      <div
-                        key={`${detailPackage.id}-day-${item.day}`}
-                        className="rounded-[24px] border border-slate-200 bg-white p-5"
-                      >
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                          <div>
-                            <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
-                              Day {item.day}
-                            </div>
-                            <h3 className="mt-3 text-lg font-semibold text-slate-950">
-                              {item.title}
-                            </h3>
-                            <p className="mt-1 text-sm font-medium text-orange-700">
-                              {item.city}
-                            </p>
-                            <p className="mt-3 text-sm leading-6 text-slate-600">
-                              {item.description}
-                            </p>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleCustomizePackage(detailPackage.id)}
-                            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700"
-                          >
-                            Modify day
-                          </button>
-                        </div>
-
-                        <div className="mt-4 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-                          {item.transfer ? <PointRow text={item.transfer} /> : null}
-                          {item.hotel ? <PointRow text={item.hotel} /> : null}
-                          {item.activities?.map((activity) => (
-                            <PointRow key={activity} text={activity} />
-                          ))}
-                          {item.meals?.map((meal) => (
-                            <PointRow key={meal} text={meal} />
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <aside className="border-t border-slate-200 bg-slate-50 px-4 py-4 lg:border-l lg:border-t-0 lg:px-5 lg:py-5">
-                <div className="rounded-[20px] border border-slate-200 bg-white p-4 sm:rounded-[24px] sm:p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
-                    Current estimate
-                  </p>
-
-                  <p className="mt-2 text-3xl font-semibold leading-none text-slate-950">
-                    {formatINR(
-                      calculatePackagePrice(
-                        detailPackage,
-                        adults,
-                        children,
-                        rooms,
-                        detailPackage.includedFlights ? 1 : 0
-                      ).totalPrice
-                    )}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-500">
-                    {formatINR(detailPackage.basePricePerPerson)} / person
-                  </p>
-
-                  <div className="mt-3 rounded-full bg-slate-50 px-4 py-2 text-xs font-medium text-slate-600">
-                    {formatLongDate(departureDate)} · {totalTravellers} guest
-                    {totalTravellers > 1 ? "s" : ""} · {rooms} room
-                    {rooms > 1 ? "s" : ""}
-                  </div>
-
-                  <div className="mt-4 grid gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setDetailPackageId(null)}
-                      className="rounded-full bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                    >
-                      Close
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleCustomizePackage(detailPackage.id)}
-                      className="rounded-full border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
-                    >
-                      Customize
-                    </button>
-                  </div>
-                </div>
-              </aside>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
-        <div className="mx-auto max-w-7xl rounded-[22px] border border-slate-200 bg-white px-4 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.08)]">
-          {selectedPackage ? (
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-950">
-                  {selectedPackage.title}
-                </p>
-                <p className="truncate text-xs text-slate-500">
-                  {selectedPackage.citySplit
-                    .map((item) => `${item.nights}N ${item.city}`)
-                    .join(" · ")}
-                </p>
-                <p className="mt-1 text-base font-semibold text-slate-950">
-                  {selectedPackageSummaryTotal != null
-                    ? formatINR(selectedPackageSummaryTotal)
-                    : "—"}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleContinueBooking}
-                className="shrink-0 rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
-              >
-                Continue
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-950">
-                  {familyCards.length} packages available
-                </p>
-                <p className="text-xs text-slate-500">
-                  Select a package to continue
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => window.scrollTo({ top: 900, behavior: "smooth" })}
-                className="shrink-0 rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
-              >
-                View packages
-              </button>
-            </div>
-          )}
+        <div className="text-left">
+          <p className="text-sm font-semibold">{title}</p>
+          <p className="text-xs text-slate-500">{subtitle}</p>
         </div>
       </div>
-
-      {!mobileSearchOpen && !mobileFiltersOpen ? <PublicFooter /> : null}
-    </div>
+    </button>
   );
 }
 
@@ -1302,28 +1300,23 @@ function SearchSelect({
   options: Array<{ value: string; label: string; description?: string }>;
   icon: ReactNode;
 }) {
-  const selected = options.find((item) => item.value === value) ?? options[0];
-
   return (
-    <label className="rounded-[24px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <span className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+    <label className="rounded-[22px] border border-slate-200 bg-white px-4 py-3">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
         {icon}
         {label}
-      </span>
+      </div>
       <select
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none bg-transparent text-sm font-semibold text-slate-950 outline-none"
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full bg-transparent text-sm font-semibold text-slate-950 outline-none"
       >
-        {options.map((item) => (
-          <option key={item.value} value={item.value}>
-            {item.label}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
-      {selected.description ? (
-        <p className="mt-1 text-xs text-slate-500">{selected.description}</p>
-      ) : null}
     </label>
   );
 }
@@ -1338,23 +1331,22 @@ function SearchDateField({
   label: string;
   value: string;
   onChange: (value: string) => void;
-  min?: string;
+  min: string;
   icon: ReactNode;
 }) {
   return (
-    <label className="rounded-[24px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <span className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+    <label className="rounded-[22px] border border-slate-200 bg-white px-4 py-3">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
         {icon}
         {label}
-      </span>
+      </div>
       <input
         type="date"
         value={value}
         min={min}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-transparent text-sm font-semibold text-slate-950 outline-none"
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full bg-transparent text-sm font-semibold text-slate-950 outline-none"
       />
-      <p className="mt-1 text-xs text-slate-500">Only future departures</p>
     </label>
   );
 }
@@ -1375,157 +1367,382 @@ function GuestsField({
   setRooms: (value: number) => void;
 }) {
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+    <div className="rounded-[22px] border border-slate-200 bg-white px-4 py-3">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
         <Users className="h-4 w-4" />
-        Rooms & Guests
+        Guests & Rooms
       </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        <CounterMini
-          label="Adults"
-          value={adults}
-          onMinus={() => setAdults(clampMinimum(adults - 1, 1))}
-          onPlus={() => setAdults(adults + 1)}
-        />
-        <CounterMini
-          label="Children"
-          value={children}
-          onMinus={() => setChildren(clampMinimum(children - 1, 0))}
-          onPlus={() => setChildren(children + 1)}
-        />
-        <CounterMini
-          label="Rooms"
-          value={rooms}
-          onMinus={() => setRooms(clampMinimum(rooms - 1, 1))}
-          onPlus={() => setRooms(rooms + 1)}
-        />
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        <MiniCounter label="Adults" value={adults} setValue={setAdults} min={1} />
+        <MiniCounter label="Children" value={children} setValue={setChildren} min={0} />
+        <MiniCounter label="Rooms" value={rooms} setValue={setRooms} min={1} />
       </div>
     </div>
   );
 }
 
-function CounterMini({
+function MiniCounter({
   label,
   value,
-  onMinus,
-  onPlus,
+  setValue,
+  min,
 }: {
   label: string;
   value: number;
-  onMinus: () => void;
-  onPlus: () => void;
+  setValue: (value: number) => void;
+  min: number;
 }) {
   return (
-    <div className="rounded-[18px] bg-slate-50 px-2.5 py-2.5">
-      <div className="mb-1 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-        {label}
-      </div>
-      <div className="flex items-center justify-between gap-1">
+    <div className="rounded-2xl bg-slate-50 px-2 py-2">
+      <p className="text-[11px] text-slate-500">{label}</p>
+      <div className="mt-1 flex items-center justify-between gap-2">
         <button
           type="button"
-          onClick={onMinus}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700"
+          onClick={() => setValue(Math.max(min, value - 1))}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm"
         >
-          <Minus className="h-3 w-3" />
+          -
         </button>
         <span className="text-sm font-semibold text-slate-950">{value}</span>
         <button
           type="button"
-          onClick={onPlus}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700"
+          onClick={() => setValue(value + 1)}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm"
         >
-          <Plus className="h-3 w-3" />
+          +
         </button>
       </div>
-    </div>
-  );
-}
-
-function ModeCard({
-  active,
-  title,
-  description,
-  onClick,
-  icon,
-}: {
-  active: boolean;
-  title: string;
-  description: string;
-  onClick: () => void;
-  icon: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-[20px] border px-4 py-3.5 text-left transition sm:rounded-[24px] sm:px-5 sm:py-4 ${
-        active
-          ? "border-orange-200 bg-orange-50 shadow-[0_8px_20px_rgba(249,115,22,0.08)]"
-          : "border-slate-200 bg-white hover:border-slate-300"
-      }`}
-    >
-      <div className="flex items-center gap-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700">
-          {icon}
-        </div>
-
-        <div className="min-w-0">
-          <p className="text-lg font-semibold leading-none text-slate-950">
-            {title}
-          </p>
-          <p className="mt-2 text-sm leading-none text-slate-600">
-            {description}
-          </p>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function PointRow({ text }: { text: string }) {
-  return (
-    <div className="flex min-w-0 items-start gap-2 rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
-      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
-      <span className="min-w-0 break-words">{text}</span>
-    </div>
-  );
-}
-
-function CompactPointer({ text }: { text: ReactNode }) {
-  return (
-    <div className="flex min-w-0 items-start gap-3">
-      <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-orange-500" />
-      <span className="min-w-0 break-words leading-6">{text}</span>
     </div>
   );
 }
 
 function IncludeTick({ text }: { text: string }) {
   return (
-    <div className="inline-flex min-w-0 items-center gap-2.5">
-      <Check className="h-4.5 w-4.5 shrink-0 text-emerald-700" />
-      <span className="min-w-0 break-words leading-5 text-emerald-700">{text}</span>
+    <div className="inline-flex items-center gap-2 text-sm text-emerald-700">
+      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100">
+        <Check className="h-3.5 w-3.5" />
+      </span>
+      <span>{text}</span>
     </div>
   );
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between rounded-[18px] border border-slate-100 bg-white px-4 py-3">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-right font-medium text-slate-900">{value}</span>
+    <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-100 px-4 py-3">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span className="text-right text-sm font-medium text-slate-900">{value}</span>
     </div>
   );
 }
 
-function DetailInfoCard({ label, value }: { label: string; value: string }) {
+function PackageDetailModal({
+  pkg,
+  departureAirportCode,
+  adults,
+  children,
+  rooms,
+  onClose,
+  onChoose,
+  onCustomize,
+}: {
+  pkg: StandardPackage;
+  departureAirportCode: string;
+  adults: number;
+  children: number;
+  rooms: number;
+  onClose: () => void;
+  onChoose: () => void;
+  onCustomize: () => void;
+}) {
+  const priceWithoutFlight = calculatePackagePrice({
+    pkg,
+    adults,
+    children,
+    rooms,
+    departureAirportCode,
+    includedFlights: false,
+  });
+
+  const priceWithFlight = calculatePackagePrice({
+    pkg,
+    adults,
+    children,
+    rooms,
+    departureAirportCode,
+    includedFlights: true,
+  });
+
   return (
-    <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+    <div className="fixed inset-0 z-[100] bg-slate-950/50 p-4">
+      <div className="mx-auto max-h-[90vh] max-w-4xl overflow-hidden rounded-[28px] bg-white shadow-[0_30px_80px_rgba(15,23,42,0.25)]">
+        <div className="relative h-56 overflow-hidden">
+          <img src={pkg.image} alt={pkg.title} className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.12)_0%,rgba(15,23,42,0.48)_100%)]" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-900"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <div className="absolute bottom-5 left-5 right-5">
+            <span className="inline-flex rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-900">
+              {pkg.badge}
+            </span>
+            <h3 className="mt-3 text-2xl font-semibold text-white">{pkg.title}</h3>
+            <p className="mt-1 text-white/85">{pkg.subtitle}</p>
+          </div>
+        </div>
+
+        <div className="max-h-[calc(90vh-224px)] overflow-y-auto px-5 py-5">
+          <div className="grid gap-4 md:grid-cols-3">
+            <StatTile
+              label="Route"
+              value={pkg.citySplit.map((item) => `${item.nights}N ${item.city}`).join(" · ")}
+            />
+            <StatTile label="Stay" value={pkg.hotelCategory} />
+            <StatTile label="Duration" value={`${pkg.durationNights}N / ${pkg.durationDays}D`} />
+          </div>
+
+          <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-slate-950">Highlights</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {pkg.highlightList.map((item) => (
+                <span
+                  key={item}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Itinerary
+            </p>
+
+            {pkg.dayPlan.map((day) => (
+              <div
+                key={`${pkg.id}-${day.day}`}
+                className="rounded-[24px] border border-slate-200 bg-white p-4"
+              >
+                <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
+                      Day {day.day} · {day.city}
+                    </p>
+                    <h4 className="mt-1 text-lg font-semibold text-slate-950">{day.title}</h4>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{day.description}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {day.transfer ? <SoftInfo title="Transfer" value={day.transfer} /> : null}
+                  {day.hotel ? <SoftInfo title="Stay" value={day.hotel} /> : null}
+                </div>
+
+                {day.activities?.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {day.activities.map((activity) => (
+                      <span
+                        key={activity}
+                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
+                      >
+                        {activity}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 rounded-[24px] bg-[#dfe3e8] p-4">
+            <p className="text-sm text-slate-500">Pricing Summary</p>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-white/70 px-3 py-3">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                  Without flight
+                </p>
+                <p className="mt-2 text-2xl font-semibold leading-none text-slate-950">
+                  {formatINR(priceWithoutFlight.totalPrice)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-white/70 px-3 py-3">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                  With flight
+                </p>
+                <p className="mt-2 text-2xl font-semibold leading-none text-slate-950">
+                  {formatINR(priceWithFlight.totalPrice)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={onChoose}
+              className="rounded-full bg-slate-950 px-4 py-3.5 text-base font-semibold text-white transition hover:bg-slate-800"
+            >
+              Choose package
+            </button>
+            <button
+              type="button"
+              onClick={onCustomize}
+              className="rounded-full border border-orange-200 bg-orange-50 px-4 py-3.5 text-base font-semibold text-orange-700 transition hover:bg-orange-100"
+            >
+              Customize this trip
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[20px] border border-slate-200 bg-white p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
         {label}
       </p>
-      <p className="mt-2 text-sm font-semibold text-slate-950">{value}</p>
+      <p className="mt-2 text-base font-semibold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function SoftInfo({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-3">
+      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{title}</p>
+      <p className="mt-1 text-sm font-medium text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function FlightChoiceModal({
+  family,
+  departureCityLabel,
+  onClose,
+  onChoose,
+  onCustomize,
+}: {
+  family: FamilyCard;
+  departureCityLabel: string;
+  onClose: () => void;
+  onChoose: (includedFlights: boolean) => void;
+  onCustomize: (includedFlights: boolean) => void;
+}) {
+  const baseVariant =
+    family.variants.find((item) => !item.includedFlights && item.hotelCategory === "4 Star") ??
+    family.variants.find((item) => !item.includedFlights) ??
+    family.representative;
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-950/50 p-4">
+      <div className="mx-auto max-w-xl rounded-[28px] bg-white p-5 shadow-[0_30px_80px_rgba(15,23,42,0.25)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">
+              Flight selection
+            </p>
+            <h3 className="mt-1 text-2xl font-semibold text-slate-950">
+              {family.representative.title}
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Departure route: {departureCityLabel} → Bangkok
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              Ask this once here. Do not ask again inside itinerary.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onChoose(false)}
+            className="rounded-[24px] border border-slate-200 bg-white p-4 text-left transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            <div className="flex items-center gap-2">
+              <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+                <MapPin className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-950">
+                  Choose without flights
+                </p>
+                <p className="text-xs text-slate-500">Land-only package</p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm text-slate-600">
+              Use this for customer-owned ticketing or flexible airline choice.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChoose(true)}
+            className="rounded-[24px] border border-orange-200 bg-orange-50 p-4 text-left transition hover:bg-orange-100"
+          >
+            <div className="flex items-center gap-2">
+              <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-orange-500 text-white">
+                <Plane className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-950">Choose with flights</p>
+                <p className="text-xs text-slate-500">Package + flight pricing</p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm text-slate-600">
+              Use this when customer wants bundled trip pricing with flights.
+            </p>
+          </button>
+        </div>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onCustomize(false)}
+            className="rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Customize without flights
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onCustomize(true)}
+            className="rounded-full border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
+          >
+            Customize with flights
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-[20px] bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-950">
+            {baseVariant.citySplit.map((item) => `${item.nights}N ${item.city}`).join(" · ")}
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            {baseVariant.hotelCategory} · {baseVariant.transferType}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1541,32 +1758,23 @@ function MobileSelectField({
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string; description?: string }>;
 }) {
-  const selected = options.find((item) => item.value === value) ?? options[0];
-
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+    <label className="block rounded-[24px] border border-slate-200 bg-white p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
         {label}
       </p>
-
-      <div className="mt-2 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none bg-transparent text-base font-semibold text-slate-950 outline-none"
-        >
-          {options.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {selected.description ? (
-        <p className="mt-2 text-sm text-slate-500">{selected.description}</p>
-      ) : null}
-    </div>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full bg-transparent text-base font-semibold text-slate-950 outline-none"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -1580,61 +1788,23 @@ function MobileDateField({
   label: string;
   value: string;
   onChange: (value: string) => void;
-  min?: string;
+  min: string;
   helper?: string;
 }) {
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+    <label className="block rounded-[24px] border border-slate-200 bg-white p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
         {label}
       </p>
-
-      <div className="mt-2 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
-        <input
-          type="date"
-          value={value}
-          min={min}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-transparent text-base font-semibold text-slate-950 outline-none"
-        />
-      </div>
-
-      {helper ? <p className="mt-2 text-sm text-slate-500">{helper}</p> : null}
-    </div>
-  );
-}
-
-function MobileFilterField({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-        {label}
-      </p>
-
-      <div className="mt-2 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none bg-transparent text-base font-semibold text-slate-950 outline-none"
-        >
-          {options.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
+      <input
+        type="date"
+        value={value}
+        min={min}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full bg-transparent text-base font-semibold text-slate-950 outline-none"
+      />
+      {helper ? <p className="mt-2 text-xs text-slate-500">{helper}</p> : null}
+    </label>
   );
 }
 
@@ -1654,32 +1824,84 @@ function MobileGuestsField({
   setRooms: (value: number) => void;
 }) {
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-        Rooms & Guests
-      </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        <CounterMini
-          label="Adults"
-          value={adults}
-          onMinus={() => setAdults(clampMinimum(adults - 1, 1))}
-          onPlus={() => setAdults(adults + 1)}
-        />
-        <CounterMini
-          label="Children"
-          value={children}
-          onMinus={() => setChildren(clampMinimum(children - 1, 0))}
-          onPlus={() => setChildren(children + 1)}
-        />
-        <CounterMini
-          label="Rooms"
-          value={rooms}
-          onMinus={() => setRooms(clampMinimum(rooms - 1, 1))}
-          onPlus={() => setRooms(rooms + 1)}
-        />
+    <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+        Guests & Rooms
+      </p>
+      <div className="mt-3 space-y-3">
+        <MobileCounter label="Adults" value={adults} setValue={setAdults} min={1} />
+        <MobileCounter label="Children" value={children} setValue={setChildren} min={0} />
+        <MobileCounter label="Rooms" value={rooms} setValue={setRooms} min={1} />
       </div>
     </div>
+  );
+}
+
+function MobileCounter({
+  label,
+  value,
+  setValue,
+  min,
+}: {
+  label: string;
+  value: number;
+  setValue: (value: number) => void;
+  min: number;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-3">
+      <p className="text-sm font-medium text-slate-700">{label}</p>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setValue(Math.max(min, value - 1))}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white"
+        >
+          -
+        </button>
+        <span className="min-w-[24px] text-center text-sm font-semibold text-slate-950">
+          {value}
+        </span>
+        <button
+          type="button"
+          onClick={() => setValue(value + 1)}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white"
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MobileFilterField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <label className="block rounded-[24px] border border-slate-200 bg-white p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+        {label}
+      </p>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full bg-transparent text-base font-semibold text-slate-950 outline-none"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

@@ -54,9 +54,10 @@ export default function ReviewPage() {
                 <h2 className="text-2xl font-semibold text-slate-950">
                   {selectedPackageTitle || "Selected trip"}
                 </h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  {adults} Adults{children ? `, ${children} Children` : ""} • {roomPreference} • Review summary
-                </p>
+               <p className="mt-2 text-sm text-slate-600">
+  {adults} Adults{children ? `, ${children} Children` : ""} • {roomPreference} •
+  Day-wise custom trip review
+</p>
               </div>
 
               <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -118,9 +119,9 @@ export default function ReviewPage() {
               <div className="mt-8 rounded-[28px] border border-slate-200 p-5">
                 <h3 className="text-base font-semibold text-slate-950">Booking Summary</h3>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
-                  This review is now tied to your central trip engine totals, so selections made in
-                  earlier steps carry through more consistently into confirmation.
-                </p>
+  This review now reflects the Trip Studio totals, including day-wise stay, transfer,
+  sightseeing, meal, and extras selections.
+</p>
               </div>
             </section>
 
