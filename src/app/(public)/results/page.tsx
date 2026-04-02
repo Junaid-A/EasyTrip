@@ -26,56 +26,67 @@ export default function ResultsPage() {
     .filter(Boolean)
     .join(" → ");
 
-  const recommendedPackages = getRecommendedPackages(
-    readyPackages
-      .map((item, index) => ({
-        id: item.id,
-        title: item.title,
-        basePrice: item.price,
-        popularityScore: Math.max(10 - index, 5),
-        marginScore: item.hotelCategory === "4 Star" ? 8 : 6,
-        budgetFitScore:
-          budget === "Luxury"
-            ? item.price >= 50000
-              ? 9
-              : 5
-            : budget === "Premium"
+  const scoredPackages = readyPackages
+    .map((item, index) => {
+      const popularityScore = Math.max(10 - index, 5);
+      const marginScore = item.hotelCategory === "4 Star" ? 8 : 6;
+      const budgetFitScore =
+        budget === "Luxury"
+          ? item.price >= 50000
+            ? 9
+            : 5
+          : budget === "Premium"
             ? item.price >= 35000 && item.price < 55000
               ? 9
               : 6
             : item.price < 35000
-            ? 9
-            : 6,
-        tripMoodFitScore:
-          travelStyle === "Mixed"
-            ? 8
-            : item.title.toLowerCase().includes(travelStyle.toLowerCase().split(" ")[0])
-            ? 9
-            : 6,
-        recommendedLabel: item.tag,
-      }))
-      .map((scored) => {
-        const original = readyPackages.find((pkg) => pkg.id === scored.id)!;
-        return {
-          ...original,
-          score: scored,
-        };
-      })
-      .sort((a, b) => {
-        const aScore =
-          a.score.popularityScore +
-          a.score.marginScore +
-          a.score.budgetFitScore +
-          a.score.tripMoodFitScore;
-        const bScore =
-          b.score.popularityScore +
-          b.score.marginScore +
-          b.score.budgetFitScore +
-          b.score.tripMoodFitScore;
+              ? 9
+              : 6;
 
-        return bScore - aScore;
-      })
-  );
+      const travelStyleKeyword = travelStyle?.toLowerCase().split(" ")[0] ?? "";
+      const tripMoodFitScore =
+        travelStyle === "Mixed"
+          ? 8
+          : item.title.toLowerCase().includes(travelStyleKeyword)
+            ? 9
+            : 6;
+
+      return {
+        ...item,
+        basePrice: item.price,
+        popularityScore,
+        marginScore,
+        budgetFitScore,
+        tripMoodFitScore,
+        recommendedLabel: item.tag,
+        score: {
+          id: item.id,
+          title: item.title,
+          basePrice: item.price,
+          popularityScore,
+          marginScore,
+          budgetFitScore,
+          tripMoodFitScore,
+          recommendedLabel: item.tag,
+        },
+      };
+    })
+    .sort((a, b) => {
+      const aScore =
+        a.score.popularityScore +
+        a.score.marginScore +
+        a.score.budgetFitScore +
+        a.score.tripMoodFitScore;
+      const bScore =
+        b.score.popularityScore +
+        b.score.marginScore +
+        b.score.budgetFitScore +
+        b.score.tripMoodFitScore;
+
+      return bScore - aScore;
+    });
+
+  const recommendedPackages = getRecommendedPackages(scoredPackages);
 
   function handlePackageSelect(item: (typeof readyPackages)[number]) {
     selectPackage({
