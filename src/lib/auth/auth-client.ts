@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { upsertProfile } from "@/lib/auth/profile-client";
 
 export async function signUpWithEmail(input: {
   fullName: string;
@@ -21,7 +22,26 @@ export async function signUpWithEmail(input: {
     },
   });
 
-  return { data, error };
+  if (error || !data.user) {
+    return { data, error };
+  }
+
+  const profileResult = await upsertProfile({
+    id: data.user.id,
+    fullName: input.fullName,
+    email: input.email,
+    phone: input.phone,
+    authProvider: "email",
+  });
+
+  if (profileResult.error) {
+    return {
+      data,
+      error: profileResult.error,
+    };
+  }
+
+  return { data, error: null };
 }
 
 export async function signInWithEmail(input: {

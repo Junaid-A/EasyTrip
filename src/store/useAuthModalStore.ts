@@ -1,25 +1,36 @@
-"use client";
-
 import { create } from "zustand";
 
-type AuthView = "login" | "signup";
+export type AuthModalMode = "login" | "signup";
 
-type AuthModalState = {
-  isOpen: boolean;
-  view: AuthView;
-  openAuthModal: (view?: AuthView) => void;
-  closeAuthModal: () => void;
-  setAuthView: (view: AuthView) => void;
+type AuthModalPrefill = {
+  email?: string;
+  phone?: string;
 };
 
-export const useAuthModalStore = create<AuthModalState>((set) => ({
-  isOpen: false,
-  view: "login",
+type AuthModalStore = {
+  isOpen: boolean;
+  mode: AuthModalMode;
+  prefillEmail: string;
+  prefillPhone: string;
+  openAuthModal: (mode?: AuthModalMode, prefill?: AuthModalPrefill) => void;
+  closeAuthModal: () => void;
+  setMode: (mode: AuthModalMode) => void;
+  setPrefill: (prefill?: AuthModalPrefill) => void;
+  clearPrefill: () => void;
+};
 
-  openAuthModal: (view = "login") =>
+export const useAuthModalStore = create<AuthModalStore>((set) => ({
+  isOpen: false,
+  mode: "login",
+  prefillEmail: "",
+  prefillPhone: "",
+
+  openAuthModal: (mode = "login", prefill) =>
     set({
       isOpen: true,
-      view,
+      mode,
+      prefillEmail: prefill?.email ?? "",
+      prefillPhone: prefill?.phone ?? "",
     }),
 
   closeAuthModal: () =>
@@ -27,8 +38,20 @@ export const useAuthModalStore = create<AuthModalState>((set) => ({
       isOpen: false,
     }),
 
-  setAuthView: (view) =>
+  setMode: (mode) =>
     set({
-      view,
+      mode,
+    }),
+
+  setPrefill: (prefill) =>
+    set({
+      prefillEmail: prefill?.email ?? "",
+      prefillPhone: prefill?.phone ?? "",
+    }),
+
+  clearPrefill: () =>
+    set({
+      prefillEmail: "",
+      prefillPhone: "",
     }),
 }));

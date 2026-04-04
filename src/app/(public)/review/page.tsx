@@ -1,8 +1,18 @@
 "use client";
 
+import { useAuth } from "@/components/providers/auth-provider";
+import { PublicFooter } from "@/components/public/public-footer";
+import { PublicHeader } from "@/components/public/public-header";
+import { hotels } from "@/data/hotels";
+import { meals } from "@/data/meals";
+import { transfers } from "@/data/transfers";
+import { sightseeing } from "@/data/sightseeing";
+import { standardPackages } from "@/lib/mock/bangkok-builder-data";
 import { useAuthModalStore } from "@/store/useAuthModalStore";
+import { useTripBuilderStore } from "@/store/useTripBuilderStore";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -15,14 +25,6 @@ import {
   UserMinus,
   UserPlus,
 } from "lucide-react";
-import { PublicHeader } from "@/components/public/public-header";
-import { PublicFooter } from "@/components/public/public-footer";
-import { useTripBuilderStore } from "@/store/useTripBuilderStore";
-import { hotels } from "@/data/hotels";
-import { transfers } from "@/data/transfers";
-import { meals } from "@/data/meals";
-import { sightseeing } from "@/data/sightseeing";
-import { standardPackages } from "@/lib/mock/bangkok-builder-data";
 
 function formatINR(value: number) {
   return `₹${Math.max(0, Math.round(value)).toLocaleString("en-IN")}`;
@@ -33,6 +35,30 @@ function formatDuration(nightsValue: string) {
   const nights = match ? Number(match[0]) : 0;
   if (!nights) return nightsValue || "Pending";
   return `${nights}N / ${nights + 1}D`;
+}
+
+async function checkUserExists(input: { email: string; phone: string }) {
+  const response = await fetch("/api/auth/check-user-exists", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: input.email,
+      phone: input.phone,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data?.error || "Failed to check user.");
+  }
+
+  return data as {
+    exists: boolean;
+    matchedBy: "email" | "phone" | "both" | null;
+  };
 }
 
 type ReviewDayBlock = {
@@ -90,7 +116,9 @@ const reviewAddons: ReviewAddon[] = [
 ];
 
 export default function ReviewPage() {
+  const router = useRouter();
   const openAuthModal = useAuthModalStore((state) => state.openAuthModal);
+  const { user, profile } = useAuth();
 
   const selectedMode = useTripBuilderStore((state) => state.selectedMode);
   const destination = useTripBuilderStore((state) => state.destination);
@@ -162,6 +190,17 @@ export default function ReviewPage() {
     specialRequestFromStore || ""
   );
   const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
+  const [checkingUser, setCheckingUser] = useState(false);
+
+  useEffect(() => {
+    if (profile?.email && !email.trim()) {
+      setEmail(profile.email);
+    }
+
+    if (profile?.phone && !mobile.trim()) {
+      setMobile(profile.phone);
+    }
+  }, [profile, email, mobile]);
 
   const fallbackExtrasTotal =
     selectedExtras.length * 900 + selectedAddOns.length * 1200;
@@ -292,9 +331,43 @@ export default function ReviewPage() {
     mobile.trim() &&
     allTravellerFieldsValid;
 
-  function handleContinue() {
+  async function handleContinue() {
     if (!mandatoryFieldsComplete) return;
-    openAuthModal("login");
+
+    if (user) {
+      router.push(`/confirmation/${bookingId || "ET365-DEMO-001"}`);
+      return;
+    }
+
+    try {
+      setCheckingUser(true);
+
+      const result = await checkUserExists({
+        email: email.trim().toLowerCase(),
+        phone: mobile.trim(),
+      });
+
+      if (result.exists) {
+        openAuthModal("login", {
+          email: email.trim().toLowerCase(),
+          phone: mobile.trim(),
+        });
+        return;
+      }
+
+      openAuthModal("signup", {
+        email: email.trim().toLowerCase(),
+        phone: mobile.trim(),
+      });
+    } catch (error) {
+      console.error(error);
+      openAuthModal("login", {
+        email: email.trim().toLowerCase(),
+        phone: mobile.trim(),
+      });
+    } finally {
+      setCheckingUser(false);
+    }
   }
 
   function toggleDay(dayId: string) {
@@ -409,14 +482,22 @@ export default function ReviewPage() {
                 <SectionHeader
                   index="1."
                   title="Traveller details"
-                  rightText="Login now"
-                  onRightAction={() => openAuthModal("login")}
+                  rightText={user ? "Signed in" : "Login now"}
+                  onRightAction={() => {
+                    if (!user) {
+                      openAuthModal("login", {
+                        email: email.trim().toLowerCase(),
+                        phone: mobile.trim(),
+                      });
+                    }
+                  }}
                 />
 
                 <div className="px-4 py-4 sm:px-6">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    Login to view your saved travellers list, get special offers,
-                    and continue faster.
+                    {user
+                      ? "Your account is active. Contact details can be prefetched from your profile."
+                      : "Login to view your saved travellers list, get special offers, and continue faster."}
                   </div>
 
                   <div className="mt-5">
@@ -878,14 +959,18 @@ export default function ReviewPage() {
                   <button
                     type="button"
                     onClick={handleContinue}
-                    disabled={!mandatoryFieldsComplete}
+                    disabled={!mandatoryFieldsComplete || checkingUser}
                     className={`w-full rounded-full px-4 py-3.5 text-sm font-semibold transition ${
-                      mandatoryFieldsComplete
+                      mandatoryFieldsComplete && !checkingUser
                         ? "bg-slate-950 text-white hover:bg-slate-800"
                         : "cursor-not-allowed bg-slate-200 text-slate-500"
                     }`}
                   >
-                    Continue
+                    {checkingUser
+                      ? "Checking..."
+                      : user
+                      ? "Continue to Confirmation"
+                      : "Continue"}
                   </button>
 
                   <Link
@@ -899,7 +984,19 @@ export default function ReviewPage() {
                     <p className="mt-3 text-xs text-slate-500">
                       Complete all mandatory traveller and contact fields to continue.
                     </p>
-                  ) : null}
+                  ) : checkingUser ? (
+                    <p className="mt-3 text-xs text-slate-500">
+                      Checking account details...
+                    </p>
+                  ) : user ? (
+                    <p className="mt-3 text-xs text-slate-500">
+                      Logged-in account detected. You will continue directly to confirmation.
+                    </p>
+                  ) : (
+                    <p className="mt-3 text-xs text-slate-500">
+                      We will check whether you already have an account before opening login or signup.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -947,14 +1044,14 @@ export default function ReviewPage() {
             <button
               type="button"
               onClick={handleContinue}
-              disabled={!mandatoryFieldsComplete}
+              disabled={!mandatoryFieldsComplete || checkingUser}
               className={`shrink-0 rounded-full px-6 py-3 text-sm font-semibold transition ${
-                mandatoryFieldsComplete
+                mandatoryFieldsComplete && !checkingUser
                   ? "bg-slate-950 text-white"
                   : "cursor-not-allowed bg-slate-200 text-slate-500"
               }`}
             >
-              Continue
+              {checkingUser ? "Checking..." : user ? "Confirm" : "Continue"}
             </button>
           </div>
 

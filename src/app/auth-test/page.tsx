@@ -8,6 +8,7 @@ import {
   signOutUser,
   signUpWithEmail,
 } from "@/lib/auth/auth-client";
+import { getMyProfile, type UserProfile } from "@/lib/auth/profile-client";
 
 type UserInfo = {
   id: string;
@@ -22,6 +23,7 @@ export default function AuthTestPage() {
   const [password, setPassword] = useState("");
 
   const [user, setUser] = useState<UserInfo>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -31,6 +33,7 @@ export default function AuthTestPage() {
 
     if (error || !data.user) {
       setUser(null);
+      setProfile(null);
       return;
     }
 
@@ -38,6 +41,14 @@ export default function AuthTestPage() {
       id: data.user.id,
       email: data.user.email,
     });
+
+    const profileResult = await getMyProfile();
+
+    if (!profileResult.error && profileResult.data) {
+      setProfile(profileResult.data);
+    } else {
+      setProfile(null);
+    }
   }
 
   useEffect(() => {
@@ -121,6 +132,7 @@ export default function AuthTestPage() {
     } else {
       setMessage("Logged out.");
       setUser(null);
+      setProfile(null);
     }
 
     setLoading(false);
@@ -264,6 +276,25 @@ export default function AuthTestPage() {
             </div>
           ) : (
             <p className="mt-2">No user logged in.</p>
+          )}
+        </div>
+
+        <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+          <p className="font-semibold text-slate-900">Current profile</p>
+          {profile ? (
+            <div className="mt-2 space-y-1">
+              <p>
+                <span className="font-medium">Full Name:</span> {profile.full_name ?? "—"}
+              </p>
+              <p>
+                <span className="font-medium">Phone:</span> {profile.phone ?? "—"}
+              </p>
+              <p>
+                <span className="font-medium">Provider:</span> {profile.auth_provider ?? "—"}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2">No profile loaded.</p>
           )}
         </div>
 
