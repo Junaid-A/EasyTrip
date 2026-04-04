@@ -7,6 +7,9 @@ import { hotels } from "@/data/hotels";
 import { meals } from "@/data/meals";
 import { transfers } from "@/data/transfers";
 import { sightseeing } from "@/data/sightseeing";
+import {
+  createBookingInDb,
+} from "@/lib/bookings/booking-client";
 import { standardPackages } from "@/lib/mock/bangkok-builder-data";
 import { useAuthModalStore } from "@/store/useAuthModalStore";
 import { useTripBuilderStore } from "@/store/useTripBuilderStore";
@@ -139,7 +142,6 @@ export default function ReviewPage() {
   const selectedExtras = useTripBuilderStore((state) => state.selectedExtras);
   const selectedAddOns = useTripBuilderStore((state) => state.selectedAddOns);
   const serviceFee = useTripBuilderStore((state) => state.serviceFee);
-  const bookingId = useTripBuilderStore((state) => state.bookingId);
   const specialRequestFromStore = useTripBuilderStore(
     (state) => state.specialRequest
   );
@@ -296,7 +298,9 @@ export default function ReviewPage() {
             ? `${hotelItem.name} • ${hotelItem.category} • ${hotelItem.area}`
             : undefined,
           activities: sightseeingItems.map((item) => item.name),
-          meals: mealItems.map((item) => `${item.mealType} included • ${item.name}`),
+          meals: mealItems.map(
+            (item) => `${item.mealType} included • ${item.name}`
+          ),
           extras: extraLabels,
         };
       });
@@ -316,6 +320,12 @@ export default function ReviewPage() {
     }));
   }, [selectedMode, customTripDays, dayPlans, destination]);
 
+  const selectedReviewAddons = useMemo(() => {
+    return selectedAddonIds
+      .map((id) => reviewAddons.find((item) => item.id === id))
+      .filter(Boolean) as ReviewAddon[];
+  }, [selectedAddonIds]);
+
   const allTravellerFieldsValid =
     travellers.length >= 1 &&
     travellers.every(
@@ -331,16 +341,83 @@ export default function ReviewPage() {
     mobile.trim() &&
     allTravellerFieldsValid;
 
+  async function buildAndRouteToConfirmation() {
+    const derivedCustomerName =
+      (profile as { name?: string | null } | null)?.name?.trim() ||
+      travellers[0]?.name?.trim() ||
+      user?.email?.split("@")[0] ||
+      "Guest User";
+
+    const newBooking = await createBookingInDb({
+      customer: {
+        name: derivedCustomerName,
+        email: email.trim().toLowerCase(),
+        phone: `${mobileCode} ${mobile.trim()}`,
+      },
+      trip: {
+        title: selectedPackageTitle || "Selected trip package",
+        destination: destination || "Bangkok",
+        nights,
+        durationLabel: formatDuration(nights),
+        departureDate: travelDates || "Dates pending",
+        packageType: modeLabel,
+        image: selectedPackageImage,
+        flightLabel: selectedFlightLabel || "Without Flight",
+        rooms,
+        adults,
+        children,
+      },
+      travellers: travellers.map((traveller) => ({
+        id: traveller.id,
+        name: traveller.name.trim(),
+        age: traveller.age.trim(),
+        gender: traveller.gender.trim(),
+      })),
+      addons: selectedReviewAddons.map((addon) => ({
+        id: addon.id,
+        title: addon.title,
+        description: addon.description,
+        price: addon.price,
+        type: "review-addon",
+      })),
+      itinerary: reviewDays,
+      pricing: {
+        packageBase: selectedPackagePrice,
+        flightTotal: estimatedFlightTotal,
+        hotelTotal: estimatedHotelTotal,
+        transferTotal: estimatedTransferTotal,
+        sightseeingTotal: estimatedSightseeingTotal,
+        mealsAndExtrasTotal: Math.max(
+          estimatedMealsTotal,
+          fallbackExtrasTotal
+        ),
+        reviewAddonsTotal: selectedAddonTotal,
+        serviceFee,
+        totalAmount: finalPrice,
+      },
+      meta: {
+        gstState: gstState.trim(),
+        specialRequest: specialRequest.trim(),
+        selectedExtras,
+        selectedAddOns,
+        selectedAddonIds,
+        bookingSource: "review-page",
+      },
+    });
+
+    router.push(`/confirmation/${newBooking.bookingRef}`);
+  }
+
   async function handleContinue() {
     if (!mandatoryFieldsComplete) return;
 
-    if (user) {
-      router.push(`/confirmation/${bookingId || "ET365-DEMO-001"}`);
-      return;
-    }
-
     try {
       setCheckingUser(true);
+
+      if (user) {
+        await buildAndRouteToConfirmation();
+        return;
+      }
 
       const result = await checkUserExists({
         email: email.trim().toLowerCase(),
@@ -361,10 +438,11 @@ export default function ReviewPage() {
       });
     } catch (error) {
       console.error(error);
-      openAuthModal("login", {
-        email: email.trim().toLowerCase(),
-        phone: mobile.trim(),
-      });
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while saving your booking."
+      );
     } finally {
       setCheckingUser(false);
     }
@@ -444,7 +522,7 @@ export default function ReviewPage() {
 
                   <div className="absolute left-4 top-4 z-10">
                     <span className="rounded-full border border-white/20 bg-white/12 px-4 py-2 text-sm font-semibold text-white backdrop-blur">
-                      {bookingId || "Booking ref pending"}
+                      Booking ref will be generated on confirmation
                     </span>
                   </div>
 
@@ -751,7 +829,9 @@ export default function ReviewPage() {
                     </div>
 
                     <p className="mt-4 text-sm text-slate-600">
-                      Itinerary / {estimatedFlightTotal > 0 ? "Flights" : "Land-only"} / Hotels / Transfers / Activities
+                      Itinerary /{" "}
+                      {estimatedFlightTotal > 0 ? "Flights" : "Land-only"} /
+                      Hotels / Transfers / Activities
                     </p>
                   </div>
 
