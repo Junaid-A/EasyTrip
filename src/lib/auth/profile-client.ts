@@ -2,12 +2,15 @@
 
 import { createClient } from "@/lib/supabase/client";
 
+export type UserRole = "customer" | "agent" | "admin";
+
 export type UserProfile = {
   id: string;
   full_name: string | null;
   email: string | null;
   phone: string | null;
   auth_provider: string | null;
+  role: UserRole;
   created_at: string;
   updated_at: string;
 };
@@ -18,6 +21,7 @@ export async function upsertProfile(input: {
   email: string;
   phone: string;
   authProvider: string;
+  role?: UserRole;
 }) {
   const supabase = createClient();
 
@@ -30,6 +34,7 @@ export async function upsertProfile(input: {
         email: input.email,
         phone: input.phone,
         auth_provider: input.authProvider,
+        role: input.role ?? "customer",
         updated_at: new Date().toISOString(),
       },
       { onConflict: "id" }

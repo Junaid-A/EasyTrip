@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 const links = [
   { href: "/agent/onboarding", label: "Onboarding" },
@@ -10,6 +14,15 @@ const links = [
 ];
 
 export function AgentSidebar() {
+  const router = useRouter();
+
+  async function handleLogout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.replace("/agent/login");
+    router.refresh();
+  }
+
   return (
     <aside className="w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4">
@@ -28,6 +41,16 @@ export function AgentSidebar() {
           </Link>
         ))}
       </nav>
+
+      <div className="mt-4 border-t border-slate-200 pt-4">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-white transition hover:opacity-95"
+        >
+          Logout
+        </button>
+      </div>
     </aside>
   );
 }

@@ -7,15 +7,13 @@ import { hotels } from "@/data/hotels";
 import { meals } from "@/data/meals";
 import { transfers } from "@/data/transfers";
 import { sightseeing } from "@/data/sightseeing";
-import {
-  createBookingInDb,
-} from "@/lib/bookings/booking-client";
+import { createBookingInDb } from "@/lib/bookings/booking-client";
 import { standardPackages } from "@/lib/mock/bangkok-builder-data";
 import { useAuthModalStore } from "@/store/useAuthModalStore";
 import { useTripBuilderStore } from "@/store/useTripBuilderStore";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -93,6 +91,17 @@ type ReviewAddon = {
   badge?: string;
 };
 
+type ReviewDraft = {
+  travellers: TravellerForm[];
+  email: string;
+  mobileCode: string;
+  mobile: string;
+  gstState: string;
+  specialRequest: string;
+  selectedAddonIds: string[];
+  openDayIds: string[];
+};
+
 const reviewAddons: ReviewAddon[] = [
   {
     id: "addon-insurance",
@@ -117,6 +126,9 @@ const reviewAddons: ReviewAddon[] = [
     price: 2490,
   },
 ];
+
+const REVIEW_RESUME_STORAGE_KEY = "easytrip365_pending_review_booking";
+const REVIEW_DRAFT_STORAGE_KEY = "easytrip365_review_draft";
 
 export default function ReviewPage() {
   const router = useRouter();
@@ -170,6 +182,9 @@ export default function ReviewPage() {
 
   const totalTravellers = adults + children;
   const initialTravellerCount = Math.max(totalTravellers, 1);
+  const autoSubmitInProgressRef = useRef(false);
+  const draftRestoredRef = useRef(false);
+  const skipNextDraftSaveRef = useRef(true);  
 
   const [travellers, setTravellers] = useState<TravellerForm[]>(
     Array.from({ length: initialTravellerCount }, (_, index) => ({
@@ -194,15 +209,107 @@ export default function ReviewPage() {
   const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
   const [checkingUser, setCheckingUser] = useState(false);
 
-  useEffect(() => {
-    if (profile?.email && !email.trim()) {
-      setEmail(profile.email);
-    }
+  function savePendingReviewSubmit() {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem(REVIEW_RESUME_STORAGE_KEY, "1");
+  }
 
-    if (profile?.phone && !mobile.trim()) {
-      setMobile(profile.phone);
+  function clearPendingReviewSubmit() {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.removeItem(REVIEW_RESUME_STORAGE_KEY);
+  }
+
+  function hasPendingReviewSubmit() {
+    if (typeof window === "undefined") return false;
+    return window.sessionStorage.getItem(REVIEW_RESUME_STORAGE_KEY) === "1";
+  }
+
+  function saveReviewDraft(nextDraft?: Partial<ReviewDraft>) {
+    if (typeof window === "undefined") return;
+
+    const draft: ReviewDraft = {
+      travellers,
+      email,
+      mobileCode,
+      mobile,
+      gstState,
+      specialRequest,
+      selectedAddonIds,
+      openDayIds,
+      ...nextDraft,
+    };
+
+    window.sessionStorage.setItem(REVIEW_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  }
+
+  function clearReviewDraft() {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.removeItem(REVIEW_DRAFT_STORAGE_KEY);
+  }
+
+  useEffect(() => {
+  if (draftRestoredRef.current || typeof window === "undefined") return;
+
+  const rawDraft = window.sessionStorage.getItem(REVIEW_DRAFT_STORAGE_KEY);
+
+  try {
+    if (rawDraft) {
+      const draft = JSON.parse(rawDraft) as ReviewDraft;
+
+      if (Array.isArray(draft.travellers) && draft.travellers.length > 0) {
+        setTravellers(draft.travellers);
+      }
+      if (typeof draft.email === "string") setEmail(draft.email);
+      if (typeof draft.mobileCode === "string") setMobileCode(draft.mobileCode);
+      if (typeof draft.mobile === "string") setMobile(draft.mobile);
+      if (typeof draft.gstState === "string") setGstState(draft.gstState);
+      if (typeof draft.specialRequest === "string") {
+        setSpecialRequest(draft.specialRequest);
+      }
+      if (Array.isArray(draft.selectedAddonIds)) {
+        setSelectedAddonIds(draft.selectedAddonIds);
+      }
+      if (Array.isArray(draft.openDayIds) && draft.openDayIds.length > 0) {
+        setOpenDayIds(draft.openDayIds);
+      }
     }
-  }, [profile, email, mobile]);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    draftRestoredRef.current = true;
+    skipNextDraftSaveRef.current = true;
+  }
+}, []);
+
+  useEffect(() => {
+    if (!profile?.email || email.trim()) return;
+    setEmail(profile.email);
+  }, [profile?.email, email]);
+
+  useEffect(() => {
+    if (!profile?.phone || mobile.trim()) return;
+    setMobile(profile.phone);
+  }, [profile?.phone, mobile]);
+
+  useEffect(() => {
+  if (!draftRestoredRef.current) return;
+
+  if (skipNextDraftSaveRef.current) {
+    skipNextDraftSaveRef.current = false;
+    return;
+  }
+
+  saveReviewDraft();
+}, [
+  travellers,
+  email,
+  mobileCode,
+  mobile,
+  gstState,
+  specialRequest,
+  selectedAddonIds,
+  openDayIds,
+]);
 
   const fallbackExtrasTotal =
     selectedExtras.length * 900 + selectedAddOns.length * 1200;
@@ -343,7 +450,7 @@ export default function ReviewPage() {
 
   async function buildAndRouteToConfirmation() {
     const derivedCustomerName =
-      (profile as { name?: string | null } | null)?.name?.trim() ||
+      profile?.full_name?.trim() ||
       travellers[0]?.name?.trim() ||
       user?.email?.split("@")[0] ||
       "Guest User";
@@ -405,39 +512,89 @@ export default function ReviewPage() {
       },
     });
 
+    clearPendingReviewSubmit();
+    clearReviewDraft();
     router.push(`/confirmation/${newBooking.bookingRef}`);
   }
+
+  useEffect(() => {
+    if (!user) {
+      autoSubmitInProgressRef.current = false;
+      return;
+    }
+
+    if (!draftRestoredRef.current) return;
+    if (!mandatoryFieldsComplete) return;
+    if (!hasPendingReviewSubmit()) return;
+    if (autoSubmitInProgressRef.current) return;
+
+    autoSubmitInProgressRef.current = true;
+
+    (async () => {
+      try {
+        setCheckingUser(true);
+        await buildAndRouteToConfirmation();
+      } catch (error) {
+        console.error(error);
+        clearPendingReviewSubmit();
+        autoSubmitInProgressRef.current = false;
+        alert(
+          error instanceof Error
+            ? error.message
+            : "Something went wrong while resuming your booking."
+        );
+      } finally {
+        setCheckingUser(false);
+      }
+    })();
+  }, [user, mandatoryFieldsComplete]);
 
   async function handleContinue() {
     if (!mandatoryFieldsComplete) return;
 
     try {
       setCheckingUser(true);
+      saveReviewDraft();
 
       if (user) {
+        clearPendingReviewSubmit();
         await buildAndRouteToConfirmation();
         return;
       }
 
+      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedPhone = mobile.trim();
+
       const result = await checkUserExists({
-        email: email.trim().toLowerCase(),
-        phone: mobile.trim(),
+        email: normalizedEmail,
+        phone: normalizedPhone,
       });
 
+      savePendingReviewSubmit();
+
       if (result.exists) {
-        openAuthModal("login", {
-          email: email.trim().toLowerCase(),
-          phone: mobile.trim(),
-        });
+        openAuthModal(
+          "login",
+          {
+            email: normalizedEmail,
+            phone: normalizedPhone,
+          },
+          "/review"
+        );
         return;
       }
 
-      openAuthModal("signup", {
-        email: email.trim().toLowerCase(),
-        phone: mobile.trim(),
-      });
+      openAuthModal(
+        "signup",
+        {
+          email: normalizedEmail,
+          phone: normalizedPhone,
+        },
+        "/review"
+      );
     } catch (error) {
       console.error(error);
+      clearPendingReviewSubmit();
       alert(
         error instanceof Error
           ? error.message
@@ -563,10 +720,15 @@ export default function ReviewPage() {
                   rightText={user ? "Signed in" : "Login now"}
                   onRightAction={() => {
                     if (!user) {
-                      openAuthModal("login", {
-                        email: email.trim().toLowerCase(),
-                        phone: mobile.trim(),
-                      });
+                      saveReviewDraft();
+                      openAuthModal(
+                        "login",
+                        {
+                          email: email.trim().toLowerCase(),
+                          phone: mobile.trim(),
+                        },
+                        "/review"
+                      );
                     }
                   }}
                 />

@@ -1,18 +1,51 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthModalStore } from "@/store/useAuthModalStore";
 import { signInWithEmail, signUpWithEmail } from "@/lib/auth/auth-client";
 import { useAuth } from "@/components/providers/auth-provider";
+import { createClient } from "@/lib/supabase/client";
+
+type AuthRole = "admin" | "agent" | "customer" | null;
+
+function getRoleFromUser(user: {
+  app_metadata?: Record<string, unknown>;
+  user_metadata?: Record<string, unknown>;
+} | null): AuthRole {
+  if (!user) return null;
+
+  const appRole = user.app_metadata?.role;
+  const userRole = user.user_metadata?.role;
+
+  if (appRole === "admin" || appRole === "agent" || appRole === "customer") {
+    return appRole;
+  }
+
+  if (userRole === "admin" || userRole === "agent" || userRole === "customer") {
+    return userRole;
+  }
+
+  return null;
+}
+
+function isBlockedFromCustomerPortal(role: AuthRole) {
+  return role === "admin" || role === "agent";
+}
 
 export function AuthModal() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const isOpen = useAuthModalStore((state) => state.isOpen);
   const mode = useAuthModalStore((state) => state.mode);
   const prefillEmail = useAuthModalStore((state) => state.prefillEmail);
   const prefillPhone = useAuthModalStore((state) => state.prefillPhone);
+  const nextPath = useAuthModalStore((state) => state.nextPath);
   const closeAuthModal = useAuthModalStore((state) => state.closeAuthModal);
   const setMode = useAuthModalStore((state) => state.setMode);
   const clearPrefill = useAuthModalStore((state) => state.clearPrefill);
+  const clearNextPath = useAuthModalStore((state) => state.clearNextPath);
 
   const { refreshAuth } = useAuth();
 
@@ -24,12 +57,17 @@ export function AuthModal() {
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState("");
 
+  const next = useMemo(() => {
+    return nextPath || searchParams.get("next") || undefined;
+  }, [nextPath, searchParams]);
+
   useEffect(() => {
     if (isOpen) {
       setEmail(prefillEmail || "");
       setPhone(prefillPhone || "");
       setErrorText("");
       setPassword("");
+      setFullName("");
     }
   }, [isOpen, prefillEmail, prefillPhone]);
 
@@ -51,6 +89,12 @@ export function AuthModal() {
     };
   }, [isOpen, closeAuthModal]);
 
+  function cleanupModalState() {
+    clearPrefill();
+    clearNextPath();
+    closeAuthModal();
+  }
+
   async function handleSubmit() {
     setLoading(true);
     setErrorText("");
@@ -63,11 +107,12 @@ export function AuthModal() {
           return;
         }
 
-        const { error } = await signUpWithEmail({
+        const { error, redirectTo } = await signUpWithEmail({
           fullName: fullName.trim(),
           phone: phone.trim(),
           email: email.trim().toLowerCase(),
           password,
+          next,
         });
 
         if (error) {
@@ -76,9 +121,25 @@ export function AuthModal() {
           return;
         }
 
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        const role = getRoleFromUser(user);
+
+        if (isBlockedFromCustomerPortal(role)) {
+          await supabase.auth.signOut();
+          setErrorText("Admin and agent accounts cannot use the customer portal.");
+          setLoading(false);
+          return;
+        }
+
         await refreshAuth();
-        clearPrefill();
-        closeAuthModal();
+        cleanupModalState();
+
+        router.push(redirectTo || "/customer/dashboard");
+        router.refresh();
         return;
       }
 
@@ -88,9 +149,10 @@ export function AuthModal() {
         return;
       }
 
-      const { error } = await signInWithEmail({
+      const { error, redirectTo } = await signInWithEmail({
         email: email.trim().toLowerCase(),
         password,
+        next,
       });
 
       if (error) {
@@ -99,9 +161,25 @@ export function AuthModal() {
         return;
       }
 
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const role = getRoleFromUser(user);
+
+      if (isBlockedFromCustomerPortal(role)) {
+        await supabase.auth.signOut();
+        setErrorText("Admin and agent accounts cannot use the customer portal.");
+        setLoading(false);
+        return;
+      }
+
       await refreshAuth();
-      clearPrefill();
-      closeAuthModal();
+      cleanupModalState();
+
+      router.push(redirectTo || "/customer/dashboard");
+      router.refresh();
     } catch (error) {
       console.error(error);
       setErrorText("Something went wrong. Please try again.");

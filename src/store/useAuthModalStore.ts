@@ -12,11 +12,18 @@ type AuthModalStore = {
   mode: AuthModalMode;
   prefillEmail: string;
   prefillPhone: string;
-  openAuthModal: (mode?: AuthModalMode, prefill?: AuthModalPrefill) => void;
+  nextPath?: string;
+  openAuthModal: (
+    mode?: AuthModalMode,
+    prefill?: AuthModalPrefill,
+    nextPath?: string
+  ) => void;
   closeAuthModal: () => void;
   setMode: (mode: AuthModalMode) => void;
   setPrefill: (prefill?: AuthModalPrefill) => void;
+  setNextPath: (nextPath?: string) => void;
   clearPrefill: () => void;
+  clearNextPath: () => void;
 };
 
 export const useAuthModalStore = create<AuthModalStore>((set) => ({
@@ -24,13 +31,15 @@ export const useAuthModalStore = create<AuthModalStore>((set) => ({
   mode: "login",
   prefillEmail: "",
   prefillPhone: "",
+  nextPath: undefined,
 
-  openAuthModal: (mode = "login", prefill) =>
+  openAuthModal: (mode = "login", prefill, nextPath) =>
     set({
       isOpen: true,
       mode,
       prefillEmail: prefill?.email ?? "",
       prefillPhone: prefill?.phone ?? "",
+      nextPath,
     }),
 
   closeAuthModal: () =>
@@ -49,9 +58,19 @@ export const useAuthModalStore = create<AuthModalStore>((set) => ({
       prefillPhone: prefill?.phone ?? "",
     }),
 
+  setNextPath: (nextPath) =>
+    set({
+      nextPath,
+    }),
+
   clearPrefill: () =>
     set({
       prefillEmail: "",
       prefillPhone: "",
+    }),
+
+  clearNextPath: () =>
+    set({
+      nextPath: undefined,
     }),
 }));

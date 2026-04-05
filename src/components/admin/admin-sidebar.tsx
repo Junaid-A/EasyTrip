@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 const items = [
   { label: "Dashboard", href: "/admin/dashboard" },
@@ -17,6 +21,15 @@ const items = [
 ];
 
 export function AdminSidebar() {
+  const router = useRouter();
+
+  async function handleLogout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.replace("/admin/login");
+    router.refresh();
+  }
+
   return (
     <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-[0_16px_50px_rgba(15,23,42,0.05)]">
       <Link href="/" className="flex items-center gap-3 border-b border-slate-200 pb-5">
@@ -41,6 +54,16 @@ export function AdminSidebar() {
             {item.label}
           </Link>
         ))}
+      </div>
+
+      <div className="mt-5 border-t border-slate-200 pt-5">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:opacity-95"
+        >
+          Logout
+        </button>
       </div>
     </div>
   );

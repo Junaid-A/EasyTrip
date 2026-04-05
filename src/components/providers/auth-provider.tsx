@@ -4,20 +4,48 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getMyProfile, type UserProfile } from "@/lib/auth/profile-client";
 
+type AuthRole = "admin" | "agent" | "customer" | null;
+
 type AuthUser = {
   id: string;
   email: string | undefined;
+  role: AuthRole;
 } | null;
 
 type AuthContextValue = {
   user: AuthUser;
   profile: UserProfile | null;
   loading: boolean;
+  isCustomerPortalUser: boolean;
   refreshAuth: () => Promise<void>;
   logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+function getRoleFromUser(user: {
+  app_metadata?: Record<string, unknown>;
+  user_metadata?: Record<string, unknown>;
+} | null): AuthRole {
+  if (!user) return null;
+
+  const appRole = user.app_metadata?.role;
+  const userRole = user.user_metadata?.role;
+
+  if (appRole === "admin" || appRole === "agent" || appRole === "customer") {
+    return appRole;
+  }
+
+  if (userRole === "admin" || userRole === "agent" || userRole === "customer") {
+    return userRole;
+  }
+
+  return null;
+}
+
+function isBlockedFromCustomerPortal(role: AuthRole) {
+  return role === "admin" || role === "agent";
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser>(null);
@@ -37,10 +65,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      const role = getRoleFromUser(data.user);
+
       setUser({
         id: data.user.id,
         email: data.user.email,
+        role,
       });
+
+      if (isBlockedFromCustomerPortal(role)) {
+        setProfile(null);
+        return;
+      }
 
       const profileResult = await getMyProfile();
 
@@ -82,6 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       profile,
       loading,
+      isCustomerPortalUser: !!user && !isBlockedFromCustomerPortal(user.role),
       refreshAuth,
       logout,
     }),
