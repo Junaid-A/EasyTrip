@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { PortalShell } from "@/components/shared/portal-shell";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
-import { StatCard } from "@/components/shared/stat-card";
 import { InfoPanel } from "@/components/shared/info-panel";
 import { createClient } from "@/lib/supabase/server";
 
@@ -44,7 +43,7 @@ type AdminBookingRow = {
   total_amount: number | null;
 };
 
-export default async function AdminDashboardPage() {
+export default async function AdminBookingsPage() {
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -71,84 +70,32 @@ export default async function AdminDashboardPage() {
 
   const bookings: AdminBookingRow[] = error ? [] : (data ?? []);
 
-  const totalRevenue = bookings.reduce((sum, booking) => {
-    const pricingTotal =
-      booking.pricing &&
-      typeof booking.pricing === "object" &&
-      typeof booking.pricing.totalAmount === "number"
-        ? booking.pricing.totalAmount
-        : 0;
-
-    const fallbackTotal =
-      typeof booking.total_amount === "number" ? booking.total_amount : 0;
-
-    return sum + (pricingTotal || fallbackTotal);
-  }, 0);
-
-  const confirmedBookings = bookings.filter(
-    (booking) => booking.status === "confirmed"
-  ).length;
-
-  const activeCustomers = new Set(
-    bookings.map((booking) => booking.customer_email).filter(Boolean)
-  ).size;
-
-  const latestBooking = bookings[0] ?? null;
-
   return (
     <PortalShell
-      title="Admin Dashboard"
-      subtitle="Top KPIs, booking visibility, revenue summary, and latest operational activity."
+      title="Admin Bookings"
+      subtitle="All live bookings from Supabase with direct access to customer and trip details."
       sidebar={<AdminSidebar />}
     >
-      <div className="grid gap-6 md:grid-cols-4">
-        <StatCard label="Expected Revenue" value={formatINR(totalRevenue)} />
-        <StatCard label="Confirmed Bookings" value={String(confirmedBookings)} />
-        <StatCard label="Active Customers" value={String(activeCustomers)} />
-        <StatCard label="Total Bookings" value={String(bookings.length)} />
-      </div>
-
-      <InfoPanel title="Operations Snapshot">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-[24px] bg-slate-50 p-5">
-            <p className="font-semibold text-slate-950">Customer Funnel</p>
-            <p className="mt-2 text-sm text-slate-600">
-              Search → Results → Review → Booking → Confirmation
-            </p>
-          </div>
-
-          <div className="rounded-[24px] bg-slate-50 p-5">
-            <p className="font-semibold text-slate-950">Top Destination</p>
-            <p className="mt-2 text-sm text-slate-600">
-              {latestBooking?.destination ||
-                "No destination data yet from live bookings"}
-            </p>
-          </div>
-        </div>
-      </InfoPanel>
-
-      <InfoPanel title="Latest Bookings">
+      <InfoPanel title="Bookings Master List">
         {error ? (
           <div className="rounded-[24px] border border-rose-200 bg-rose-50 p-6">
             <p className="text-lg font-semibold text-rose-900">
               Could not load bookings
             </p>
-            <p className="mt-2 text-sm text-rose-700">
-              {error.message}
-            </p>
+            <p className="mt-2 text-sm text-rose-700">{error.message}</p>
           </div>
         ) : bookings.length === 0 ? (
           <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 p-6">
             <p className="text-lg font-semibold text-slate-950">
-              No bookings recorded yet
+              No bookings found
             </p>
             <p className="mt-2 text-sm text-slate-600">
-              New bookings created from the review page will appear here.
+              Bookings created from the review flow will appear here.
             </p>
           </div>
         ) : (
           <div className="space-y-4">
-            {bookings.slice(0, 5).map((booking) => {
+            {bookings.map((booking) => {
               const pricingTotal =
                 booking.pricing &&
                 typeof booking.pricing === "object" &&
@@ -165,7 +112,7 @@ export default async function AdminDashboardPage() {
               return (
                 <div
                   key={booking.id}
-                  className="rounded-[24px] border border-slate-200 p-5"
+                  className="rounded-[24px] border border-slate-200 bg-white p-5"
                 >
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
@@ -182,7 +129,8 @@ export default async function AdminDashboardPage() {
                       </p>
                       <p className="mt-1 text-sm text-slate-500">
                         {booking.destination || "Destination pending"} •{" "}
-                        {booking.duration_label || "Duration pending"}
+                        {booking.duration_label || "Duration pending"} •{" "}
+                        {booking.departure_date || "Dates pending"}
                       </p>
                     </div>
 
@@ -204,24 +152,21 @@ export default async function AdminDashboardPage() {
                     <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
                       {booking.flight_label || "Without Flight"}
                     </span>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
-                      {booking.departure_date || "Dates pending"}
-                    </span>
                   </div>
 
                   <div className="mt-5 flex flex-wrap gap-3">
                     <Link
-                      href={`/confirmation/${booking.booking_ref}`}
-                      className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-                    >
-                      View Confirmation
-                    </Link>
-
-                    <Link
                       href={`/admin/bookings/${booking.booking_ref}`}
                       className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                     >
-                      Admin View
+                      Open Booking
+                    </Link>
+
+                    <Link
+                      href={`/confirmation/${booking.booking_ref}`}
+                      className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                    >
+                      Customer Confirmation
                     </Link>
                   </div>
                 </div>
