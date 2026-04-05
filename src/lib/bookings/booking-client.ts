@@ -126,7 +126,19 @@ function mapRowToBooking(row: any): BookingRecord {
     itinerary: Array.isArray(row.itinerary) ? row.itinerary : [],
     pricing:
       row.pricing && typeof row.pricing === "object"
-        ? row.pricing
+        ? {
+            packageBase: Number(row.pricing.packageBase ?? 0),
+            flightTotal: Number(row.pricing.flightTotal ?? 0),
+            hotelTotal: Number(row.pricing.hotelTotal ?? 0),
+            transferTotal: Number(row.pricing.transferTotal ?? 0),
+            sightseeingTotal: Number(row.pricing.sightseeingTotal ?? 0),
+            mealsAndExtrasTotal: Number(row.pricing.mealsAndExtrasTotal ?? 0),
+            reviewAddonsTotal: Number(row.pricing.reviewAddonsTotal ?? 0),
+            serviceFee: Number(row.pricing.serviceFee ?? 0),
+            totalAmount: Number(
+              row.pricing.totalAmount ?? row.total_amount ?? 0
+            ),
+          }
         : {
             packageBase: 0,
             flightTotal: 0,
@@ -142,23 +154,29 @@ function mapRowToBooking(row: any): BookingRecord {
   };
 }
 
-export async function createBookingInDb(input: CreateBookingInput) {
+async function getAuthenticatedUserId() {
   const supabase = createClient();
 
   const {
     data: { user },
-    error: authError,
+    error,
   } = await supabase.auth.getUser();
 
-  if (authError || !user) {
+  if (error || !user) {
     throw new Error("User session not found.");
   }
 
+  return user.id;
+}
+
+export async function createBookingInDb(input: CreateBookingInput) {
+  const supabase = createClient();
+  const userId = await getAuthenticatedUserId();
   const bookingRef = generateBookingRef();
 
   const payload = {
     booking_ref: bookingRef,
-    user_id: user.id,
+    user_id: userId,
     status: input.status ?? "confirmed",
 
     trip_title: input.trip.title,
@@ -205,10 +223,12 @@ export async function createBookingInDb(input: CreateBookingInput) {
 
 export async function getMyBookingsFromDb() {
   const supabase = createClient();
+  const userId = await getAuthenticatedUserId();
 
   const { data, error } = await supabase
     .from("bookings")
     .select("*")
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -220,11 +240,13 @@ export async function getMyBookingsFromDb() {
 
 export async function getBookingByRefFromDb(bookingRef: string) {
   const supabase = createClient();
+  const userId = await getAuthenticatedUserId();
 
   const { data, error } = await supabase
     .from("bookings")
     .select("*")
     .eq("booking_ref", bookingRef)
+    .eq("user_id", userId)
     .single();
 
   if (error) {

@@ -30,7 +30,7 @@ function getRoleFromUser(user: {
 }
 
 function isBlockedFromCustomerPortal(role: AuthRole) {
-  return role === "admin" || role === "agent";
+  return role === "customer";
 }
 
 export function AuthModal() {

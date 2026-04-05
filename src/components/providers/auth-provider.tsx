@@ -43,8 +43,8 @@ function getRoleFromUser(user: {
   return null;
 }
 
-function isBlockedFromCustomerPortal(role: AuthRole) {
-  return role === "admin" || role === "agent";
+function isCustomerRole(role: AuthRole) {
+  return role === "customer";
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -73,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role,
       });
 
-      if (isBlockedFromCustomerPortal(role)) {
+      if (!isCustomerRole(role)) {
         setProfile(null);
         return;
       }
@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       profile,
       loading,
-      isCustomerPortalUser: !!user && !isBlockedFromCustomerPortal(user.role),
+      isCustomerPortalUser: !!user && isCustomerRole(user.role),
       refreshAuth,
       logout,
     }),
