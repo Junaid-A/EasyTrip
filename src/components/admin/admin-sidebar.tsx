@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const items = [
@@ -20,8 +20,14 @@ const items = [
   { label: "Receivables", href: "/admin/receivables" },
 ];
 
-export function AdminSidebar() {
+function isActive(pathname: string, href: string) {
+  if (href === "/admin/dashboard") return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export function AdminSidebar({ collapsed = false }: { collapsed?: boolean }) {
   const router = useRouter();
+  const pathname = usePathname();
 
   async function handleLogout() {
     const supabase = createClient();
@@ -31,38 +37,65 @@ export function AdminSidebar() {
   }
 
   return (
-    <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-[0_16px_50px_rgba(15,23,42,0.05)]">
-      <Link href="/" className="flex items-center gap-3 border-b border-slate-200 pb-5">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#020617_0%,#1d4ed8_100%)] text-sm font-bold text-white">
+    <div className="flex h-full min-h-0 flex-col rounded-[28px] border border-[var(--line)] bg-[var(--surface)] p-4 shadow-[0_16px_50px_rgba(15,23,42,0.05)]">
+      <Link
+        href="/"
+        className={[
+          "flex items-center gap-3 border-b border-[var(--line)] pb-4",
+          collapsed ? "justify-center" : "",
+        ].join(" ")}
+      >
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--hero-ink)] text-sm font-bold text-white">
           AD
         </div>
-        <div>
-          <p className="text-sm font-semibold tracking-[0.08em] text-slate-900">
-            ADMIN PANEL
-          </p>
-          <p className="text-xs text-slate-500">Operations prototype</p>
-        </div>
+
+        {!collapsed ? (
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold tracking-[0.08em] text-[var(--hero-ink)]">
+              ADMIN PANEL
+            </p>
+            <p className="truncate text-xs text-[var(--muted)]">
+              EasyTrip365 operations
+            </p>
+          </div>
+        ) : null}
       </Link>
 
-      <div className="mt-5 space-y-2">
-        {items.map((item) => (
-          <Link
-            key={item.label}
-            href={item.href}
-            className="block rounded-2xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            {item.label}
-          </Link>
-        ))}
+      <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+        <div className="space-y-2">
+          {items.map((item) => {
+            const active = isActive(pathname, item.href);
+
+            return (
+              <Link
+                key={item.label}
+                href={item.href}
+                title={collapsed ? item.label : undefined}
+                className={[
+                  "flex items-center rounded-2xl transition",
+                  collapsed ? "justify-center px-2 py-3 text-xs font-semibold" : "px-4 py-3",
+                  active
+                    ? "bg-[var(--brand)] text-white shadow-[0_10px_24px_rgba(249,115,22,0.22)]"
+                    : "text-[var(--foreground)] hover:bg-white",
+                ].join(" ")}
+              >
+                {collapsed ? item.label.slice(0, 2).toUpperCase() : item.label}
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="mt-5 border-t border-slate-200 pt-5">
+      <div className="mt-4 border-t border-[var(--line)] pt-4">
         <button
           type="button"
           onClick={handleLogout}
-          className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:opacity-95"
+          className={[
+            "rounded-2xl bg-[var(--hero-ink)] py-3 text-sm font-semibold text-white transition hover:opacity-95",
+            collapsed ? "w-full px-2" : "w-full px-4",
+          ].join(" ")}
         >
-          Logout
+          {collapsed ? "↩" : "Logout"}
         </button>
       </div>
     </div>
