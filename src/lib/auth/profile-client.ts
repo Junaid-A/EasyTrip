@@ -11,6 +11,8 @@ export type UserProfile = {
   phone: string | null;
   auth_provider: string | null;
   role: UserRole;
+  is_blocked?: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 };

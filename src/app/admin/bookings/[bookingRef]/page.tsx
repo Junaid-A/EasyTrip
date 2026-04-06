@@ -1,511 +1,682 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { PortalShell } from "@/components/shared/portal-shell";
-import { AdminSidebar } from "@/components/admin/admin-sidebar";
-import { InfoPanel } from "@/components/shared/info-panel";
-import { StatusUpdateForm } from "@/components/admin/status-update-form";
+import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { createClient } from "@/lib/supabase/server";
+import {
+  BookingCrmWorkspace,
+  type BookingActivityLog,
+  type BookingCrmInitialData,
+  type BookingCrmSaveInput,
+  type PastBookingItem,
+} from "@/components/admin/bookings/booking-crm-workspace";
 
-function formatINR(value: number) {
-  return `₹${Math.max(0, Math.round(value)).toLocaleString("en-IN")}`;
+type PageProps = {
+  params: Promise<{
+    bookingRef: string;
+  }>;
+};
+
+type UnknownRecord = Record<string, unknown>;
+
+function asString(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : fallback;
 }
 
-function formatDate(value?: string) {
-  if (!value) return "Pending";
-
-  try {
-    return new Date(value).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return value;
+function asNumber(value: unknown, fallback = 0) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
   }
+  return fallback;
+}
+
+function asArray<T = unknown>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function asObject(value: unknown): UnknownRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
+function toIso(value: unknown) {
+  const raw = asString(value);
+  if (!raw) return new Date().toISOString();
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function toDateInput(value: unknown) {
+  const raw = asString(value);
+  if (!raw) return "";
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw.slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
+function titleCase(input: string) {
+  return input.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function normalizeStatus(value?: string | null) {
   const status = (value || "pending").toLowerCase();
-
-  if (status === "confirmed" || status === "cancelled" || status === "pending") {
-    return status;
-  }
-
-  return "pending";
+  return ["pending", "confirmed", "cancelled"].includes(status) ? status : "pending";
 }
 
-function getStatusClasses(status?: string | null) {
-  const normalized = normalizeStatus(status);
-
-  if (normalized === "confirmed") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-
-  if (normalized === "cancelled") {
-    return "border-rose-200 bg-rose-50 text-rose-700";
-  }
-
-  return "border-amber-200 bg-amber-50 text-amber-700";
+function normalizePaymentStatus(value?: string | null) {
+  const status = (value || "unpaid").toLowerCase();
+  return ["unpaid", "partial", "paid", "refunded"].includes(status)
+    ? status
+    : "unpaid";
 }
 
-type BookingTraveller = {
-  id: string;
-  name: string;
-  age: string;
-  gender: string;
-};
+function normalizePricing(row: UnknownRecord) {
+  const crmData = asObject(row.crm_data);
+  const pricing = asObject(row.pricing);
+  const crmPricing = asObject(crmData.pricing);
 
-type BookingAddon = {
-  id: string;
-  title: string;
-  description?: string;
-  price: number;
-  type?: string;
-};
+  const packageBase =
+    asNumber(pricing.packageBase) ||
+    asNumber(pricing.basePackage) ||
+    asNumber(pricing.base_price) ||
+    asNumber(crmPricing.packageBase);
 
-type BookingDay = {
-  id: string;
-  dayLabel: string;
-  dateText?: string;
-  city: string;
-  title: string;
-  description: string;
-  transfer?: string;
-  hotel?: string;
-  activities: string[];
-  meals: string[];
-  extras: string[];
-};
+  const flights =
+    asNumber(pricing.flights) ||
+    asNumber(pricing.estimatedFlightTotal) ||
+    asNumber(crmPricing.flights);
 
-type BookingDetailRow = {
-  id: string;
-  booking_ref: string;
-  created_at: string;
-  status: string | null;
-  user_id: string | null;
+  const hotels =
+    asNumber(pricing.hotels) ||
+    asNumber(pricing.estimatedHotelTotal) ||
+    asNumber(crmPricing.hotels);
 
-  customer_name: string | null;
-  customer_email: string | null;
-  customer_phone: string | null;
+  const transfers =
+    asNumber(pricing.transfers) ||
+    asNumber(pricing.estimatedTransferTotal) ||
+    asNumber(crmPricing.transfers);
 
-  trip_title: string | null;
-  destination: string | null;
-  nights: string | null;
-  duration_label: string | null;
-  departure_date: string | null;
-  package_type: string | null;
-  image: string | null;
-  flight_label: string | null;
-  rooms: number | null;
-  adults: number | null;
-  children: number | null;
+  const sightseeing =
+    asNumber(pricing.sightseeing) ||
+    asNumber(pricing.estimatedSightseeingTotal) ||
+    asNumber(crmPricing.sightseeing);
 
-  gst_state: string | null;
-  special_request: string | null;
+  const meals =
+    asNumber(pricing.meals) ||
+    asNumber(pricing.estimatedMealsTotal) ||
+    asNumber(crmPricing.meals);
 
-  travellers: BookingTraveller[] | null;
-  addons: BookingAddon[] | null;
-  itinerary: BookingDay[] | null;
+  const serviceFee =
+    asNumber(pricing.serviceFee) ||
+    asNumber(pricing.service_fee) ||
+    asNumber(crmPricing.serviceFee);
 
-  pricing:
-    | {
-        packageBase?: number;
-        flightTotal?: number;
-        hotelTotal?: number;
-        transferTotal?: number;
-        sightseeingTotal?: number;
-        mealsAndExtrasTotal?: number;
-        reviewAddonsTotal?: number;
-        serviceFee?: number;
-        totalAmount?: number;
-      }
-    | null;
+  const extra =
+    asNumber(pricing.extra) ||
+    asNumber(pricing.extraChargesTotal) ||
+    asNumber(crmPricing.extra);
 
-  meta: {
-    gstState?: string;
-    specialRequest?: string;
-    selectedExtras?: string[];
-    selectedAddOns?: string[];
-    selectedAddonIds?: string[];
-    bookingSource?: string;
-  } | null;
+  const discount =
+    asNumber(pricing.discount) ||
+    asNumber(pricing.discountValue) ||
+    asNumber(crmPricing.discount);
 
-  total_amount: number | null;
-};
+  const computedTotal =
+    packageBase +
+    flights +
+    hotels +
+    transfers +
+    sightseeing +
+    meals +
+    serviceFee +
+    extra -
+    discount;
 
-async function updateBookingStatus(formData: FormData) {
-  "use server";
+  const totalAmount = asNumber(row.total_amount, computedTotal);
 
-  const bookingRef = String(formData.get("bookingRef") || "");
-  const nextStatus = normalizeStatus(String(formData.get("status") || "pending"));
-
-  if (!bookingRef) return;
-
-  const supabase = await createClient();
-
-  await supabase
-    .from("bookings")
-    .update({ status: nextStatus })
-    .eq("booking_ref", bookingRef);
-
-  revalidatePath("/admin/bookings");
-  revalidatePath(`/admin/bookings/${bookingRef}`);
+  return {
+    packageBase,
+    flights,
+    hotels,
+    transfers,
+    sightseeing,
+    meals,
+    serviceFee,
+    extra,
+    discount,
+    totalAmount,
+  };
 }
 
-export default async function AdminBookingDetailPage({
-  params,
-}: {
-  params: Promise<{ bookingRef: string }>;
-}) {
-  const { bookingRef } = await params;
-  const supabase = await createClient();
+function mapTravellers(row: UnknownRecord) {
+  const travellers = asArray<UnknownRecord>(row.travellers);
 
+  return travellers.map((traveller, index) => ({
+    id: asString(traveller.id) || `traveller-${index + 1}`,
+    name:
+      asString(traveller.name) ||
+      asString(traveller.fullName) ||
+      `Traveller ${index + 1}`,
+    age:
+      asString(traveller.age) ||
+      (asNumber(traveller.age) ? String(asNumber(traveller.age)) : ""),
+    gender: asString(traveller.gender) || "Adult",
+  }));
+}
+
+function mapItinerary(row: UnknownRecord) {
+  const itinerary = asArray<UnknownRecord>(row.itinerary);
+  const destination = asString(row.destination);
+
+  return itinerary.map((day, index) => ({
+    id: asString(day.id) || `day-${index + 1}`,
+    day: asNumber(day.day, index + 1) || index + 1,
+    title: asString(day.title) || `Day ${index + 1}`,
+    city: asString(day.city) || destination,
+    description: asString(day.description) || asString(day.notes),
+  }));
+}
+
+function mapPayments(row: UnknownRecord) {
+  const crmData = asObject(row.crm_data);
+  const payments = asArray<UnknownRecord>(crmData.payments);
+
+  return payments.map((payment, index) => ({
+    id: asString(payment.id) || `payment-${index + 1}`,
+    amount: asNumber(payment.amount),
+    mode: asString(payment.mode) || "UPI",
+    date: toDateInput(payment.date) || new Date().toISOString().slice(0, 10),
+    note: asString(payment.note),
+  }));
+}
+
+function mapNotes(row: UnknownRecord) {
+  const crmData = asObject(row.crm_data);
+  const notes = asArray<UnknownRecord>(crmData.notes);
+
+  return notes.map((note, index) => ({
+    id: asString(note.id) || `note-${index + 1}`,
+    text: asString(note.text) || asString(note.note),
+    createdAt: toIso(note.createdAt || note.created_at),
+  }));
+}
+
+function mapTags(row: UnknownRecord) {
+  const crmData = asObject(row.crm_data);
+  return asArray<string>(crmData.tags).filter(Boolean);
+}
+
+function normalizeInitialData(
+  row: UnknownRecord,
+  logs: BookingActivityLog[],
+  pastBookings: PastBookingItem[],
+): BookingCrmInitialData {
+  const crmData = asObject(row.crm_data);
+  const pricing = normalizePricing(row);
+  const travellers = mapTravellers(row);
+  const payments = mapPayments(row);
+  const tripTitle =
+    asString(row.trip_title) ||
+    asString(crmData.tripTitle) ||
+    asString(row.destination) ||
+    "Trip";
+
+  const amountPaid =
+    payments.reduce((sum, item) => sum + Number(item.amount || 0), 0) ||
+    asNumber(crmData.amountPaid) ||
+    (normalizePaymentStatus(asString(row.payment_status)) === "paid"
+      ? pricing.totalAmount
+      : 0);
+
+  return {
+    bookingId: asString(row.id),
+    bookingRef: asString(row.booking_ref),
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at || row.created_at),
+
+    tripTitle,
+    customerName: asString(row.customer_name) || "Customer",
+    customerEmail: asString(row.customer_email),
+    customerPhone: asString(row.customer_phone),
+    alternatePhone: asString(crmData.alternatePhone),
+    whatsappNumber: asString(crmData.whatsappNumber) || asString(row.customer_phone),
+
+    destination: asString(row.destination),
+    departure: asString(crmData.departure) || asString(row.departure_date),
+    startDate: toDateInput(crmData.startDate || row.departure_date),
+    endDate: toDateInput(crmData.endDate),
+    duration:
+      asString(row.duration_label) ||
+      asString(row.nights) ||
+      asString(crmData.duration),
+    rooms: String(asNumber(row.rooms, 1)),
+    travellersCount:
+      String(travellers.length || asNumber(row.adults) + asNumber(row.children) || 1),
+
+    bookingStatus: normalizeStatus(asString(row.status)),
+    paymentStatus: normalizePaymentStatus(asString(row.payment_status)),
+
+    totalAmount: pricing.totalAmount,
+    amountPaid,
+
+    tags: mapTags(row),
+    notes: mapNotes(row),
+    payments,
+    travellers,
+    itinerary: mapItinerary(row),
+
+    pricing: {
+      packageBase: pricing.packageBase,
+      flights: pricing.flights,
+      hotels: pricing.hotels,
+      transfers: pricing.transfers,
+      sightseeing: pricing.sightseeing,
+      meals: pricing.meals,
+      serviceFee: pricing.serviceFee,
+      extra: pricing.extra,
+      discount: pricing.discount,
+    },
+
+    activityLogs: logs,
+    pastBookings,
+  };
+}
+
+function buildSummary(
+  action: string,
+  changes: Array<{
+    field: string;
+    before: string | null;
+    after: string | null;
+  }>,
+) {
+  if (action === "booking_saved") {
+    if (!changes.length) return "Booking saved.";
+    if (changes.length === 1) return `${titleCase(changes[0].field)} updated.`;
+    return `${changes.length} fields updated.`;
+  }
+
+  if (action === "edit_enabled") return "Edit mode enabled.";
+  if (action === "payment_added") return "Payment added.";
+  if (action === "note_added") return "Internal note added.";
+  if (action === "status_updated") return "Booking status updated.";
+  if (action === "payment_status_updated") return "Payment status updated.";
+
+  return titleCase(action);
+}
+
+async function getActivityLogs(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  bookingId: string,
+): Promise<BookingActivityLog[]> {
   const { data, error } = await supabase
+    .from("booking_activity_logs")
+    .select("*")
+    .eq("booking_id", bookingId)
+    .order("created_at", { ascending: false });
+
+  if (error || !data) return [];
+
+  return (data as UnknownRecord[]).map((row) => ({
+    id: asString(row.id),
+    createdAt: toIso(row.created_at),
+    actorName: asString(row.actor_name) || "Admin",
+    actorId: asString(row.actor_user_id),
+    action: asString(row.action),
+    entityType: asString(row.entity_type),
+    summary: asString(row.summary),
+    changes: asArray<UnknownRecord>(row.changes).map((change) => ({
+      field: asString(change.field),
+      before: change.before == null ? null : String(change.before),
+      after: change.after == null ? null : String(change.after),
+    })),
+  }));
+}
+
+async function insertActivityLogs(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  input: {
+    bookingId: string;
+    bookingRef: string;
+    actorId: string;
+    actorName: string;
+    logs: Array<{
+      action: string;
+      entityType: string;
+      summary: string;
+      changes: Array<{
+        field: string;
+        before: string | null;
+        after: string | null;
+      }>;
+    }>;
+  },
+) {
+  if (!input.logs.length) return;
+
+  const rows = input.logs.map((log) => ({
+    booking_id: input.bookingId,
+    booking_ref: input.bookingRef,
+    actor_user_id: input.actorId,
+    actor_name: input.actorName,
+    action: log.action,
+    entity_type: log.entityType,
+    summary: log.summary,
+    changes: log.changes,
+    created_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase.from("booking_activity_logs").insert(rows);
+
+  if (error) {
+    throw new Error(error.message || "Failed to write activity logs.");
+  }
+}
+
+async function getPastBookings(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  row: UnknownRecord,
+): Promise<PastBookingItem[]> {
+  const bookingId = asString(row.id);
+  const userId = asString(row.user_id);
+  const customerEmail = asString(row.customer_email);
+
+  let query = supabase
+    .from("bookings")
+    .select("id, booking_ref, destination, status, total_amount, created_at")
+    .neq("id", bookingId)
+    .order("created_at", { ascending: false })
+    .limit(8);
+
+  if (userId) {
+    query = query.eq("user_id", userId);
+  } else if (customerEmail) {
+    query = query.eq("customer_email", customerEmail);
+  } else {
+    return [];
+  }
+
+  const { data, error } = await query;
+  if (error || !data) return [];
+
+  return (data as UnknownRecord[]).map((item) => ({
+    id: asString(item.id),
+    bookingRef: asString(item.booking_ref),
+    destination: asString(item.destination) || "Destination",
+    status: normalizeStatus(asString(item.status)),
+    totalAmount: asNumber(item.total_amount),
+    createdAt: toIso(item.created_at),
+  }));
+}
+
+export default async function AdminBookingCrmPage({ params }: PageProps) {
+  const { bookingRef } = await params;
+  const user = await getCurrentUser();
+
+  if (!user) notFound();
+
+  const supabase = await createClient();
+
+  const { data: booking, error } = await supabase
     .from("bookings")
     .select("*")
     .eq("booking_ref", bookingRef)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
-    notFound();
+  if (error || !booking) notFound();
+
+  const currentBooking = booking as UnknownRecord;
+  const bookingId = asString(currentBooking.id);
+  const initialLogs = await getActivityLogs(supabase, bookingId);
+  const pastBookings = await getPastBookings(supabase, currentBooking);
+  const initialData = normalizeInitialData(currentBooking, initialLogs, pastBookings);
+
+  async function onLog(input: {
+    bookingId: string;
+    bookingRef: string;
+    action: string;
+    entityType: string;
+    summary: string;
+    changes?: Array<{
+      field: string;
+      before: string | null;
+      after: string | null;
+    }>;
+  }) {
+    "use server";
+
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return { ok: false, message: "Not authorized." };
+    }
+
+    const serverSupabase = await createClient();
+    const actorName =
+      currentUser.profile?.full_name ||
+      currentUser.user?.email ||
+      "Admin";
+
+    const { data, error } = await serverSupabase
+      .from("booking_activity_logs")
+      .insert({
+        booking_id: input.bookingId,
+        booking_ref: input.bookingRef,
+        actor_user_id: currentUser.user.id,
+        actor_name: actorName,
+        action: input.action,
+        entity_type: input.entityType,
+        summary: input.summary,
+        changes: input.changes ?? [],
+        created_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      return {
+        ok: false,
+        message: error?.message || "Failed to save activity log.",
+      };
+    }
+
+    const row = data as UnknownRecord;
+
+    return {
+      ok: true,
+      log: {
+        id: asString(row.id),
+        createdAt: toIso(row.created_at),
+        actorName: asString(row.actor_name) || "Admin",
+        actorId: asString(row.actor_user_id),
+        action: asString(row.action),
+        entityType: asString(row.entity_type),
+        summary: asString(row.summary),
+        changes: asArray<UnknownRecord>(row.changes).map((change) => ({
+          field: asString(change.field),
+          before: change.before == null ? null : String(change.before),
+          after: change.after == null ? null : String(change.after),
+        })),
+      },
+    };
   }
 
-  const booking = data as BookingDetailRow;
-  const currentStatus = normalizeStatus(booking.status);
+  async function onSave(payload: BookingCrmSaveInput) {
+    "use server";
 
-  const pricingTotal =
-    booking.pricing &&
-    typeof booking.pricing === "object" &&
-    typeof booking.pricing.totalAmount === "number"
-      ? booking.pricing.totalAmount
-      : 0;
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return { ok: false, message: "Not authorized." };
+    }
 
-  const totalAmount =
-    pricingTotal ||
-    (typeof booking.total_amount === "number" ? booking.total_amount : 0);
+    const serverSupabase = await createClient();
 
-  const allSelectedExtras = [
-    ...((booking.meta?.selectedExtras ?? []) as string[]),
-    ...((booking.meta?.selectedAddOns ?? []) as string[]),
-    ...((booking.addons ?? []).map((addon) => addon.title)),
-  ];
+    const { data: existingBooking, error: existingError } = await serverSupabase
+      .from("bookings")
+      .select("*")
+      .eq("id", payload.bookingId)
+      .single();
 
-  return (
-    <PortalShell
-      title={`Booking ${booking.booking_ref}`}
-      subtitle="Admin detail view for customer, trip, pricing, itinerary, and status operations."
-      sidebar={<AdminSidebar />}
-    >
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="space-y-6">
-          <InfoPanel title="Booking Summary">
-            <div className="mb-5 flex flex-wrap items-center gap-3">
-              <span
-                className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] ${getStatusClasses(
-                  currentStatus,
-                )}`}
-              >
-                {currentStatus}
-              </span>
-              <span className="text-sm text-slate-500">
-                Created on {formatDate(booking.created_at)}
-              </span>
-            </div>
+    if (existingError || !existingBooking) {
+      return {
+        ok: false,
+        message: existingError?.message || "Booking not found.",
+      };
+    }
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <InfoCard label="Booking Ref" value={booking.booking_ref} />
-              <InfoCard label="Status" value={currentStatus} />
-              <InfoCard
-                label="Created On"
-                value={formatDate(booking.created_at)}
-              />
-              <InfoCard label="User ID" value={booking.user_id || "N/A"} />
-              <InfoCard
-                label="Trip"
-                value={booking.trip_title || "Untitled Trip"}
-              />
-              <InfoCard
-                label="Destination"
-                value={booking.destination || "Pending"}
-              />
-              <InfoCard
-                label="Duration"
-                value={booking.duration_label || booking.nights || "Pending"}
-              />
-              <InfoCard
-                label="Departure"
-                value={booking.departure_date || "Pending"}
-              />
-              <InfoCard
-                label="Package Type"
-                value={booking.package_type || "Pending"}
-              />
-              <InfoCard
-                label="Flights"
-                value={booking.flight_label || "Without Flight"}
-              />
-              <InfoCard
-                label="Rooms"
-                value={`${booking.rooms ?? 1} Room${(booking.rooms ?? 1) > 1 ? "s" : ""}`}
-              />
-              <InfoCard
-                label="Travellers"
-                value={`${booking.adults ?? 0} Adult${(booking.adults ?? 0) > 1 ? "s" : ""}${booking.children ? `, ${booking.children} Child${booking.children > 1 ? "ren" : ""}` : ""}`}
-              />
-            </div>
-          </InfoPanel>
+    const existing = existingBooking as UnknownRecord;
+    const existingCrmData = asObject(existing.crm_data);
+    const existingMeta = asObject(existing.meta);
+    const travellerCount = Math.max(1, payload.travellers.length || Number(payload.travellersCount || 1));
 
-          <InfoPanel title="Customer Details">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <InfoCard
-                label="Customer Name"
-                value={booking.customer_name || "Guest"}
-              />
-              <InfoCard
-                label="Customer Email"
-                value={booking.customer_email || "No email"}
-              />
-              <InfoCard
-                label="Customer Phone"
-                value={booking.customer_phone || "No phone"}
-              />
-              <InfoCard
-                label="GST State"
-                value={booking.gst_state || booking.meta?.gstState || "Not provided"}
-              />
-            </div>
+    const computedTotal =
+      Number(payload.pricing.packageBase || 0) +
+      Number(payload.pricing.flights || 0) +
+      Number(payload.pricing.hotels || 0) +
+      Number(payload.pricing.transfers || 0) +
+      Number(payload.pricing.sightseeing || 0) +
+      Number(payload.pricing.meals || 0) +
+      Number(payload.pricing.serviceFee || 0) +
+      Number(payload.pricing.extra || 0) -
+      Number(payload.pricing.discount || 0);
 
-            <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Special Request</p>
-              <p className="mt-2 text-sm font-medium leading-6 text-slate-900">
-                {booking.special_request ||
-                  booking.meta?.specialRequest ||
-                  "No special requests"}
-              </p>
-            </div>
-          </InfoPanel>
+    const paymentsTotal = payload.payments.reduce(
+      (sum, item) => sum + Number(item.amount || 0),
+      0,
+    );
 
-          <InfoPanel title="Traveller Details">
-            {booking.travellers && booking.travellers.length > 0 ? (
-              <div className="space-y-3">
-                {booking.travellers.map((traveller, index) => (
-                  <div
-                    key={traveller.id || `${traveller.name}-${index}`}
-                    className="rounded-[20px] border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <p className="text-sm font-semibold text-slate-900">
-                      Traveller {index + 1}
-                    </p>
-                    <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
-                      <InfoMini label="Name" value={traveller.name} />
-                      <InfoMini label="Age" value={traveller.age} />
-                      <InfoMini label="Gender" value={traveller.gender} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-600">No traveller records found.</p>
-            )}
-          </InfoPanel>
+    const crmData = {
+      ...existingCrmData,
+      tripTitle: payload.tripTitle,
+      alternatePhone: payload.alternatePhone,
+      whatsappNumber: payload.whatsappNumber,
+      departure: payload.departure,
+      startDate: payload.startDate,
+      endDate: payload.endDate,
+      duration: payload.duration,
+      tags: payload.tags,
+      notes: payload.notes,
+      payments: payload.payments,
+      amountPaid: paymentsTotal,
+    };
 
-          <InfoPanel title="Add-ons and Extras">
-            {allSelectedExtras.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {allSelectedExtras.map((item, index) => (
-                  <span
-                    key={`${item}-${index}`}
-                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700"
-                  >
-                    {item}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-600">No add-ons or extras selected.</p>
-            )}
-          </InfoPanel>
+    const pricing = {
+      ...asObject(existing.pricing),
+      packageBase: Number(payload.pricing.packageBase || 0),
+      flights: Number(payload.pricing.flights || 0),
+      hotels: Number(payload.pricing.hotels || 0),
+      transfers: Number(payload.pricing.transfers || 0),
+      sightseeing: Number(payload.pricing.sightseeing || 0),
+      meals: Number(payload.pricing.meals || 0),
+      serviceFee: Number(payload.pricing.serviceFee || 0),
+      extra: Number(payload.pricing.extra || 0),
+      discount: Number(payload.pricing.discount || 0),
+      totalAmount: Math.max(0, Math.round(computedTotal)),
+    };
 
-          <InfoPanel title="Itinerary">
-            {booking.itinerary && booking.itinerary.length > 0 ? (
-              <div className="space-y-4">
-                {booking.itinerary.map((day) => (
-                  <div
-                    key={day.id}
-                    className="rounded-[24px] border border-slate-200 bg-slate-50 p-5"
-                  >
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold uppercase tracking-[0.14em] text-sky-700">
-                          {day.dayLabel}
-                        </p>
-                        <h3 className="mt-1 text-lg font-semibold text-slate-950">
-                          {day.title}
-                        </h3>
-                      </div>
-                      <div className="text-sm text-slate-500">
-                        {day.city}
-                        {day.dateText ? ` • ${day.dateText}` : ""}
-                      </div>
-                    </div>
+    const patch = {
+      status: normalizeStatus(payload.bookingStatus),
+      payment_status: normalizePaymentStatus(payload.paymentStatus),
+      trip_title: payload.tripTitle || payload.destination || asString(existing.trip_title),
+      destination: payload.destination || asString(existing.destination),
+      duration_label: payload.duration || asString(existing.duration_label),
+      nights: payload.duration || asString(existing.nights),
+      departure_date: payload.startDate || asString(existing.departure_date),
+      rooms: Math.max(1, Number(payload.rooms || existing.rooms || 1)),
+      adults: Math.max(1, asNumber(existing.adults, travellerCount)),
+      children: Math.max(0, asNumber(existing.children, 0)),
+      customer_name: payload.customerName,
+      customer_email: payload.customerEmail,
+      customer_phone: payload.customerPhone,
+      travellers: payload.travellers,
+      itinerary: payload.itinerary,
+      pricing,
+      crm_data: crmData,
+      meta: {
+        ...existingMeta,
+        lastEditedFrom: "admin-booking-workspace",
+      },
+      total_amount: Math.max(0, Math.round(computedTotal)),
+      updated_at: new Date().toISOString(),
+    };
 
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      {day.description}
-                    </p>
+    const { error: updateError } = await serverSupabase
+      .from("bookings")
+      .update(patch)
+      .eq("id", payload.bookingId);
 
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <InfoMini label="Hotel" value={day.hotel || "—"} />
-                      <InfoMini label="Transfer" value={day.transfer || "—"} />
-                      <InfoMini
-                        label="Activities"
-                        value={day.activities?.length ? day.activities.join(", ") : "—"}
-                      />
-                      <InfoMini
-                        label="Meals"
-                        value={day.meals?.length ? day.meals.join(", ") : "—"}
-                      />
-                      <InfoMini
-                        label="Extras"
-                        value={day.extras?.length ? day.extras.join(", ") : "—"}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-600">No itinerary data found.</p>
-            )}
-          </InfoPanel>
-        </div>
+    if (updateError) {
+      return {
+        ok: false,
+        message: updateError.message || "Failed to save booking.",
+      };
+    }
 
-        <div className="space-y-6">
-          <InfoPanel title="Booking Operations">
-            <StatusUpdateForm
-              bookingRef={booking.booking_ref}
-              currentStatus={currentStatus}
-              bookingSource={booking.meta?.bookingSource || "Website"}
-              action={updateBookingStatus}
-            />
-          </InfoPanel>
+    const actorName =
+      currentUser.profile?.full_name ||
+      currentUser.user?.email ||
+      "Admin";
 
-          <InfoPanel title="Pricing">
-            <div className="space-y-3 text-sm">
-              <PriceRow
-                label="Package Base"
-                value={booking.pricing?.packageBase ?? 0}
-              />
-              <PriceRow
-                label="Flights"
-                value={booking.pricing?.flightTotal ?? 0}
-              />
-              <PriceRow
-                label="Hotels"
-                value={booking.pricing?.hotelTotal ?? 0}
-              />
-              <PriceRow
-                label="Transfers"
-                value={booking.pricing?.transferTotal ?? 0}
-              />
-              <PriceRow
-                label="Sightseeing"
-                value={booking.pricing?.sightseeingTotal ?? 0}
-              />
-              <PriceRow
-                label="Meals & Extras"
-                value={booking.pricing?.mealsAndExtrasTotal ?? 0}
-              />
-              <PriceRow
-                label="Review Add-ons"
-                value={booking.pricing?.reviewAddonsTotal ?? 0}
-              />
-              <PriceRow
-                label="Service Fee"
-                value={booking.pricing?.serviceFee ?? 0}
-              />
+    const logsToInsert = [
+      ...payload.pendingLogs,
+      {
+        action: "booking_saved",
+        entityType: "booking",
+        summary: buildSummary("booking_saved", payload.changes),
+        changes: payload.changes,
+      },
+    ];
 
-              <div className="my-3 border-t border-slate-200" />
+    try {
+      await insertActivityLogs(serverSupabase, {
+        bookingId: payload.bookingId,
+        bookingRef: payload.bookingRef,
+        actorId: currentUser.user.id,
+        actorName,
+        logs: logsToInsert,
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Booking saved, but logs failed to persist.",
+      };
+    }
 
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-slate-600">
-                  Total Amount
-                </span>
-                <span className="text-lg font-semibold text-slate-950">
-                  {formatINR(totalAmount)}
-                </span>
-              </div>
-            </div>
-          </InfoPanel>
+    revalidatePath(`/admin/bookings/${payload.bookingRef}`);
+    revalidatePath("/admin/bookings");
 
-          <InfoPanel title="Quick Links">
-            <div className="space-y-3">
-              <Link
-                href="/admin/bookings"
-                className="flex items-center justify-between rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-white"
-              >
-                <span>Back to bookings</span>
-                <span>→</span>
-              </Link>
+    const { data: freshBooking, error: freshError } = await serverSupabase
+      .from("bookings")
+      .select("*")
+      .eq("id", payload.bookingId)
+      .single();
 
-              {booking.booking_ref ? (
-                <Link
-                  href={`/confirmation/${booking.booking_ref}`}
-                  className="flex items-center justify-between rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-white"
-                >
-                  <span>Open customer confirmation</span>
-                  <span>→</span>
-                </Link>
-              ) : null}
+    if (freshError || !freshBooking) {
+      return {
+        ok: false,
+        message: freshError?.message || "Saved, but failed to reload booking.",
+      };
+    }
 
-              {booking.customer_email ? (
-                <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    Customer Email
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-slate-900">
-                    {booking.customer_email}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          </InfoPanel>
-        </div>
-      </div>
-    </PortalShell>
-  );
-}
+    const freshLogs = await getActivityLogs(serverSupabase, payload.bookingId);
+    const freshPastBookings = await getPastBookings(serverSupabase, freshBooking as UnknownRecord);
+    const freshInitialData = normalizeInitialData(
+      freshBooking as UnknownRecord,
+      freshLogs,
+      freshPastBookings,
+    );
 
-function InfoCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[20px] border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-2 text-sm font-medium leading-6 text-slate-950">
-        {value}
-      </p>
-    </div>
-  );
-}
+    return {
+      ok: true,
+      message: "Booking saved successfully.",
+      logs: freshLogs,
+      data: freshInitialData,
+    };
+  }
 
-function InfoMini({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[18px] border border-slate-200 bg-white p-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-medium leading-5 text-slate-900">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function PriceRow({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-slate-600">{label}</span>
-      <span className="font-medium text-slate-950">{formatINR(value)}</span>
-    </div>
-  );
+  return <BookingCrmWorkspace initialData={initialData} onSave={onSave} onLog={onLog} />;
 }
