@@ -1,78 +1,79 @@
-const quotes = [
-  {
-    id: "QT-2401",
-    customer: "Aarav Sharma",
-    destination: "Bangkok",
-    status: "Sent",
-    amount: "₹48,500",
-  },
-  {
-    id: "QT-2402",
-    customer: "Neha Patel",
-    destination: "Phuket + Krabi",
-    status: "Draft",
-    amount: "₹62,900",
-  },
-  {
-    id: "QT-2403",
-    customer: "Rahul Mehta",
-    destination: "Dubai",
-    status: "Approved",
-    amount: "₹71,200",
-  },
-  {
-    id: "QT-2404",
-    customer: "Simran Kaur",
-    destination: "Singapore",
-    status: "Payment Pending",
-    amount: "₹55,400",
-  },
-];
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
+import { PortalShell } from "@/components/shared/portal-shell";
+import { AgentSidebar } from "@/components/agent/agent-sidebar";
+
+type Quote = {
+  id: string;
+  quote_ref: string;
+  customer_name: string;
+  destination: string;
+  amount: number;
+  status: string;
+};
 
 export default function AgentQuotesPage() {
+  const supabase = createClient();
+  const router = useRouter();
+
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+
+  useEffect(() => {
+    fetchQuotes();
+  }, []);
+
+  async function fetchQuotes() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const { data: agent } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("auth_user_id", user.id)
+      .single();
+
+    if (!agent) return;
+
+    const { data } = await supabase
+      .from("quotes")
+      .select("*")
+      .eq("agent_id", agent.id)
+      .order("created_at", { ascending: false });
+
+    setQuotes(data || []);
+  }
+
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-10">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-sky-600">Agent Panel</p>
-            <h1 className="text-3xl font-bold text-slate-900">Quotes</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              View active quotations, follow-up status, and value.
-            </p>
-          </div>
+    <PortalShell title="Quotes" sidebar={<AgentSidebar />}>
+      <div className="space-y-4">
+        <button
+          onClick={() => router.push("/agent/quotes/new")}
+          className="rounded-xl bg-black px-4 py-2 text-white"
+        >
+          + Create Quote
+        </button>
 
-          <a
-            href="/agent/quotes/new"
-            className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-          >
-            Create New Quote
-          </a>
-        </div>
-
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="grid grid-cols-5 gap-4 border-b border-slate-200 bg-slate-100 px-5 py-4 text-sm font-semibold text-slate-700">
-            <div>Quote ID</div>
-            <div>Customer</div>
-            <div>Destination</div>
-            <div>Status</div>
-            <div>Amount</div>
-          </div>
-
-          {quotes.map((quote) => (
-            <div
-              key={quote.id}
-              className="grid grid-cols-5 gap-4 border-b border-slate-100 px-5 py-4 text-sm text-slate-700 last:border-b-0"
-            >
-              <div className="font-semibold text-slate-900">{quote.id}</div>
-              <div>{quote.customer}</div>
-              <div>{quote.destination}</div>
-              <div>{quote.status}</div>
-              <div className="font-semibold text-slate-900">{quote.amount}</div>
+        {quotes.map((q) => (
+          <div key={q.id} className="rounded-xl bg-white p-4 shadow">
+            <div className="flex justify-between">
+              <div>
+                <p className="font-semibold">{q.customer_name}</p>
+                <p className="text-sm text-gray-500">{q.destination}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-semibold">₹{q.amount}</p>
+                <p className="text-sm">{q.status}</p>
+              </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
-    </main>
+    </PortalShell>
   );
 }
