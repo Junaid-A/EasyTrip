@@ -39,11 +39,15 @@ function isApprovedAgent(user: {
 }
 
 function mustChangePassword(user: {
+  app_metadata?: Record<string, unknown>;
   user_metadata?: Record<string, unknown>;
 } | null) {
   if (!user) return false;
 
-  return user.user_metadata?.must_change_password === true;
+  return (
+    user.app_metadata?.must_change_password === true ||
+    user.user_metadata?.must_change_password === true
+  );
 }
 
 export default function AgentResetPasswordPage() {
@@ -54,6 +58,7 @@ export default function AgentResetPasswordPage() {
   const [submitting, setSubmitting] = useState(false);
   const [checking, setChecking] = useState(true);
   const [errorText, setErrorText] = useState("");
+  const [successText, setSuccessText] = useState("");
 
   const passwordValid = useMemo(() => password.length >= 8, [password]);
 
@@ -98,6 +103,7 @@ export default function AgentResetPasswordPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setErrorText("");
+    setSuccessText("");
 
     if (!passwordValid) {
       setErrorText("Password must be at least 8 characters.");
@@ -126,9 +132,19 @@ export default function AgentResetPasswordPage() {
         return;
       }
 
-      await supabase.auth.signOut();
+      const {
+        data: { user: refreshedUser },
+      } = await supabase.auth.getUser();
 
-      router.replace("/agent/login?reset=success");
+      const stillNeedsReset = mustChangePassword(refreshedUser);
+
+      if (stillNeedsReset) {
+        setErrorText("Password updated, but reset flag is still active.");
+        return;
+      }
+
+      setSuccessText("Password updated successfully.");
+      router.replace("/agent/dashboard");
       router.refresh();
     } finally {
       setSubmitting(false);
@@ -194,6 +210,12 @@ export default function AgentResetPasswordPage() {
           {errorText ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {errorText}
+            </div>
+          ) : null}
+
+          {successText ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {successText}
             </div>
           ) : null}
 

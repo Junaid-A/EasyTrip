@@ -41,11 +41,15 @@ function isApprovedAgent(user: {
 }
 
 function mustChangePassword(user: {
+  app_metadata?: Record<string, unknown>;
   user_metadata?: Record<string, unknown>;
 } | null) {
   if (!user) return false;
 
-  return user.user_metadata?.must_change_password === true;
+  return (
+    user.app_metadata?.must_change_password === true ||
+    user.user_metadata?.must_change_password === true
+  );
 }
 
 export default function AgentLoginPage() {
@@ -58,13 +62,14 @@ export default function AgentLoginPage() {
   );
 
   const urlError = searchParams.get("error");
-  const resetSuccess = searchParams.get("reset") === "success";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorText, setErrorText] = useState(
-    urlError === "not-approved" ? "Your agent account is not approved yet." : ""
+    urlError === "not-approved"
+      ? "Your agent account is not approved yet."
+      : ""
   );
 
   async function handleSubmit(e: FormEvent) {
@@ -139,12 +144,6 @@ export default function AgentLoginPage() {
             Only approved agents can access the portal.
           </p>
         </div>
-
-        {resetSuccess ? (
-          <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            Password changed successfully. Please sign in with your new password.
-          </div>
-        ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

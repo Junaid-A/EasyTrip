@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function AgentIndexPage() {
-  redirect("/agent/dashboard");
+export default function AdminPage() {
+  redirect("/admin/dashboard");
 }
