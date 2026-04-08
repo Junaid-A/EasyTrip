@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowUp,
   Check,
@@ -177,6 +177,9 @@ export function CustomTripFlow() {
   );
 
   const router = useRouter();
+  const pathname = usePathname();
+
+  const reviewPath = pathname?.startsWith("/agent/") ? "/agent/quotes/review" : "/review";
 
   const [activeDayId, setActiveDayId] = useState<string>("");
   const [hotelSearch, setHotelSearch] = useState("");
@@ -485,9 +488,24 @@ export function CustomTripFlow() {
     );
   }
 
-    function handleContinue() {
+  function handleContinue() {
     if (!allDaysCompleted) return;
-    router.push("/agent/quotes/review");
+
+    recalculateCustomTripTotals({
+      hotelTotal: pricing.hotelTotal,
+      transferTotal: pricing.transferTotal,
+      sightseeingTotal: pricing.sightseeingTotal,
+      mealsTotal: pricing.mealsTotal,
+      extrasTotal: pricing.extrasTotal,
+    });
+
+    useTripBuilderStore.setState((state) => ({
+      ...state,
+      customTripDays,
+      selectedPackagePrice: pricing.basePrice,
+    }));
+
+    router.push(reviewPath);
   }
 
   function toggleSummaryDay(dayId: string) {
@@ -1183,7 +1201,7 @@ export function CustomTripFlow() {
                 Summary
               </button>
 
-                            <button
+              <button
                 type="button"
                 onClick={handleContinue}
                 disabled={!allDaysCompleted}
@@ -1239,7 +1257,7 @@ export function CustomTripFlow() {
                   Summary
                 </button>
 
-                                <button
+                <button
                   type="button"
                   onClick={handleContinue}
                   disabled={!allDaysCompleted}
