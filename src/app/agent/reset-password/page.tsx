@@ -1,194 +1,126 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-function getRoleFromUser(user: {
-  app_metadata?: Record<string, unknown>;
-  user_metadata?: Record<string, unknown>;
-} | null) {
-  if (!user) return null;
-
-  const appRole = user.app_metadata?.role;
-  const userRole = user.user_metadata?.role;
-
-  if (appRole === "admin" || appRole === "agent" || appRole === "customer") {
-    return appRole;
-  }
-
-  if (userRole === "admin" || userRole === "agent" || userRole === "customer") {
-    return userRole;
-  }
-
-  return null;
-}
-
-function isApprovedAgent(user: {
-  app_metadata?: Record<string, unknown>;
-  user_metadata?: Record<string, unknown>;
-} | null) {
-  if (!user) return false;
-
-  return (
-    user.app_metadata?.approved === true ||
-    user.user_metadata?.approved === true ||
-    user.app_metadata?.agent_approved === true ||
-    user.user_metadata?.agent_approved === true
-  );
-}
-
-function mustChangePassword(user: {
-  app_metadata?: Record<string, unknown>;
-  user_metadata?: Record<string, unknown>;
-} | null) {
-  if (!user) return false;
-
-  return (
-    user.app_metadata?.must_change_password === true ||
-    user.user_metadata?.must_change_password === true
-  );
-}
-
 export default function AgentResetPasswordPage() {
   const router = useRouter();
+  const supabase = createClient();
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [checking, setChecking] = useState(true);
-  const [errorText, setErrorText] = useState("");
-  const [successText, setSuccessText] = useState("");
-
-  const passwordValid = useMemo(() => password.length >= 8, [password]);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    let ignore = false;
+    let active = true;
 
-    async function verifyAccess() {
-      const supabase = createClient();
-
+    async function load() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (ignore) return;
+      if (!active) return;
 
-      const role = getRoleFromUser(user);
-      const approved = isApprovedAgent(user);
-      const needsReset = mustChangePassword(user);
-
-      if (!user || role !== "agent" || !approved) {
+      if (!user) {
         router.replace("/agent/login");
-        router.refresh();
         return;
       }
 
-      if (!needsReset) {
+      if (user.app_metadata?.role !== "agent") {
+        router.replace("/");
+        return;
+      }
+
+      if (!user.app_metadata?.must_change_password) {
         router.replace("/agent/dashboard");
-        router.refresh();
         return;
       }
 
       setChecking(false);
     }
 
-    verifyAccess();
+    void load();
 
     return () => {
-      ignore = true;
+      active = false;
     };
-  }, [router]);
+  }, [router, supabase]);
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setErrorText("");
-    setSuccessText("");
+    setError("");
 
-    if (!passwordValid) {
-      setErrorText("Password must be at least 8 characters.");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
       return;
     }
 
     if (password !== confirmPassword) {
-      setErrorText("Passwords do not match.");
+      setError("Passwords do not match.");
       return;
     }
 
     setSubmitting(true);
 
-    try {
-      const supabase = createClient();
+    const { error: updateUserError } = await supabase.auth.updateUser({ password });
 
-      const { error } = await supabase.auth.updateUser({
-        password,
-        data: {
-          must_change_password: false,
-        },
-      });
-
-      if (error) {
-        setErrorText(error.message || "Unable to update password.");
-        return;
-      }
-
-      const {
-        data: { user: refreshedUser },
-      } = await supabase.auth.getUser();
-
-      const stillNeedsReset = mustChangePassword(refreshedUser);
-
-      if (stillNeedsReset) {
-        setErrorText("Password updated, but reset flag is still active.");
-        return;
-      }
-
-      setSuccessText("Password updated successfully.");
-      router.replace("/agent/dashboard");
-      router.refresh();
-    } finally {
+    if (updateUserError) {
+      setError(updateUserError.message);
       setSubmitting(false);
+      return;
     }
+
+    const res = await fetch("/api/agent/complete-password-reset", {
+      method: "POST",
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setError(data.error ?? "Password updated, but reset completion failed.");
+      setSubmitting(false);
+      return;
+    }
+
+    await supabase.auth.signOut();
+    router.replace("/agent/login?reset=success");
   }
 
   if (checking) {
     return (
-      <main className="min-h-screen bg-[#f8f4ee] px-4 py-10">
-        <div className="mx-auto max-w-md rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
-          <p className="text-sm text-slate-600">Checking access...</p>
+      <div className="min-h-screen bg-[#f7f3ee] px-4 py-12">
+        <div className="mx-auto max-w-md rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
+          <p className="text-sm text-slate-600">Loading...</p>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#f8f4ee] px-4 py-10">
-      <div className="mx-auto max-w-md rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
-        <div className="mb-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-600">
-            EasyTrip365
-          </p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">
-            Change password
-          </h1>
-          <p className="mt-2 text-sm text-slate-600">
-            First login requires a password change before agent access is allowed.
-          </p>
-        </div>
+    <div className="min-h-screen bg-[#f7f3ee] px-4 py-12">
+      <div className="mx-auto max-w-md rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-orange-500">
+          EasyTrip365
+        </p>
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">
+          Change password
+        </h1>
+        <p className="mt-2 text-sm text-slate-600">
+          First login requires a password change before dashboard access is allowed.
+        </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              New password
-            </label>
+            <label className="mb-2 block text-sm font-medium text-slate-700">New password</label>
             <input
               type="password"
-              autoComplete="new-password"
-              required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm outline-none transition focus:border-slate-400"
-              placeholder="Minimum 8 characters"
+              className="h-12 w-full rounded-[22px] border border-slate-200 px-4 text-sm outline-none focus:border-slate-400"
+              required
             />
           </div>
 
@@ -198,36 +130,28 @@ export default function AgentResetPasswordPage() {
             </label>
             <input
               type="password"
-              autoComplete="new-password"
-              required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-slate-200 px-4 text-sm outline-none transition focus:border-slate-400"
-              placeholder="Re-enter password"
+              className="h-12 w-full rounded-[22px] border border-slate-200 px-4 text-sm outline-none focus:border-slate-400"
+              required
             />
           </div>
 
-          {errorText ? (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {errorText}
-            </div>
-          ) : null}
-
-          {successText ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {successText}
+          {error ? (
+            <div className="rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+              {error}
             </div>
           ) : null}
 
           <button
             type="submit"
             disabled={submitting}
-            className="h-12 w-full rounded-2xl bg-slate-950 text-sm font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-12 w-full rounded-full bg-[#020826] text-sm font-semibold text-white disabled:opacity-60"
           >
-            {submitting ? "Updating..." : "Update password"}
+            {submitting ? "Updating password..." : "Update password"}
           </button>
         </form>
       </div>
-    </main>
+    </div>
   );
 }

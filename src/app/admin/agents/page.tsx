@@ -5,31 +5,66 @@ import {
   BadgeIndianRupee,
   Building2,
   CheckCircle2,
+  Copy,
   Eye,
   FileText,
   PauseCircle,
+  Pencil,
   RefreshCw,
   RotateCcw,
+  Save,
   Search,
   ShieldCheck,
   Users,
+  X,
   XCircle,
-  Pencil,
-  Save,
 } from "lucide-react";
 import { PortalShell } from "@/components/shared/portal-shell";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { InfoPanel } from "@/components/shared/info-panel";
 import { createClient } from "@/lib/supabase/client";
 
-type AgentStatus = "pending" | "approved" | "paused" | "rejected";
+type AgentStatus =
+  | "pending"
+  | "approved"
+  | "paused"
+  | "rejected"
+  | "active"
+  | "inactive"
+  | "suspended";
+
 type QuoteStatus = "approved" | "pending" | "cancelled";
+type AgentApplicationStatus = "pending" | "approved" | "rejected";
+
+type AgentApplicationRow = {
+  id: string;
+  company_name: string;
+  contact_person: string;
+  email: string;
+  phone: string;
+  city: string | null;
+  country: string | null;
+  business_type: string | null;
+  specialization: string | null;
+  years_experience: number | null;
+  monthly_booking_volume: string | null;
+  notes: string | null;
+  status: AgentApplicationStatus;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  review_notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
 
 type AgentRow = {
   id: string;
   auth_user_id: string | null;
+  application_id?: string | null;
   company_name: string;
   contact_name: string | null;
+  contact_person?: string | null;
   email: string | null;
   phone: string | null;
   logo_url: string | null;
@@ -50,6 +85,15 @@ type AgentRow = {
   last_activity_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  country?: string | null;
+  approval_status?: string | null;
+  password_reset_required?: boolean;
+  total_bookings?: number;
+  total_revenue?: number;
+  total_commission?: number;
+  active_customers?: number;
+  last_booking_at?: string | null;
+  last_login_at?: string | null;
 };
 
 type QuoteRow = {
@@ -85,6 +129,8 @@ type ActivityLogRow = {
   action: string;
   actor_name: string | null;
   actor_email: string | null;
+  activity_type?: string | null;
+  activity_label?: string | null;
   meta: Record<string, any> | null;
   created_at: string | null;
 };
@@ -134,6 +180,12 @@ type ManageFormState = {
   notes: string;
 };
 
+type CredentialModalState = {
+  email: string;
+  temporaryPassword: string;
+  companyName: string;
+};
+
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -156,6 +208,10 @@ function formatDate(value?: string | null) {
   }).format(parsed);
 }
 
+function getAgentContact(agent: AgentRow) {
+  return agent.contact_name || agent.contact_person || "—";
+}
+
 function getStatusClasses(status: AgentStatus) {
   switch (status) {
     case "approved":
@@ -164,6 +220,19 @@ function getStatusClasses(status: AgentStatus) {
       return "border-amber-200 bg-amber-50 text-amber-700";
     case "paused":
       return "border-slate-200 bg-slate-100 text-slate-700";
+    case "rejected":
+      return "border-rose-200 bg-rose-50 text-rose-700";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-700";
+  }
+}
+
+function getApplicationStatusClasses(status: AgentApplicationStatus) {
+  switch (status) {
+    case "approved":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "pending":
+      return "border-amber-200 bg-amber-50 text-amber-700";
     case "rejected":
       return "border-rose-200 bg-rose-50 text-rose-700";
     default:
@@ -192,7 +261,7 @@ function normalizeFormValue(value: string) {
 function buildManageForm(agent: AgentRow): ManageFormState {
   return {
     company_name: agent.company_name || "",
-    contact_name: agent.contact_name || "",
+    contact_name: agent.contact_name || agent.contact_person || "",
     email: agent.email || "",
     phone: agent.phone || "",
     logo_url: agent.logo_url || "",
@@ -430,13 +499,17 @@ export default function AdminAgentsPage() {
   const supabase = createClient();
 
   const [agents, setAgents] = useState<AgentRow[]>([]);
+  const [applications, setApplications] = useState<AgentApplicationRow[]>([]);
   const [quotes, setQuotes] = useState<QuoteRow[]>([]);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [logs, setLogs] = useState<ActivityLogRow[]>([]);
+  const [temporaryPasswords, setTemporaryPasswords] = useState<Record<string, string>>({});
+  const [credentialModal, setCredentialModal] = useState<CredentialModalState | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | AgentStatus>("all");
@@ -455,20 +528,24 @@ export default function AdminAgentsPage() {
     setLoading(true);
     setErrorMessage("");
 
-    const [agentsResponse, quotesResponse, bookingsResponse, logsResponse] =
-      await Promise.all([
-        supabase.from("agents").select("*").order("created_at", { ascending: false }),
-        supabase.from("quotes").select("*").order("created_at", { ascending: false }),
-        supabase.from("bookings").select("*").order("created_at", { ascending: false }),
-        supabase
-          .from("agent_activity_logs")
-          .select("*")
-          .order("created_at", { ascending: false }),
-      ]);
+    const [
+      agentsResponse,
+      applicationsResponse,
+      quotesResponse,
+      bookingsResponse,
+      logsResponse,
+    ] = await Promise.all([
+      supabase.from("agents").select("*").order("created_at", { ascending: false }),
+      supabase.from("agent_applications").select("*").order("submitted_at", { ascending: false }),
+      supabase.from("quotes").select("*").order("created_at", { ascending: false }),
+      supabase.from("bookings").select("*").order("created_at", { ascending: false }),
+      supabase.from("agent_activity_logs").select("*").order("created_at", { ascending: false }),
+    ]);
 
     if (agentsResponse.error) {
       setErrorMessage(agentsResponse.error.message || "Failed to load agents.");
       setAgents([]);
+      setApplications([]);
       setQuotes([]);
       setBookings([]);
       setLogs([]);
@@ -476,19 +553,30 @@ export default function AdminAgentsPage() {
       return;
     }
 
+    if (applicationsResponse.error) {
+      setErrorMessage(
+        (prev) => prev || applicationsResponse.error?.message || "Failed to load applications.",
+      );
+    }
+
     if (quotesResponse.error) {
-      setErrorMessage(quotesResponse.error.message || "Failed to load quotes.");
+      setErrorMessage((prev) => prev || quotesResponse.error.message || "Failed to load quotes.");
     }
 
     if (bookingsResponse.error) {
-      setErrorMessage((prev) => prev || bookingsResponse.error?.message || "Failed to load bookings.");
+      setErrorMessage(
+        (prev) => prev || bookingsResponse.error?.message || "Failed to load bookings.",
+      );
     }
 
     if (logsResponse.error) {
-      setErrorMessage((prev) => prev || logsResponse.error?.message || "Failed to load activity logs.");
+      setErrorMessage(
+        (prev) => prev || logsResponse.error?.message || "Failed to load activity logs.",
+      );
     }
 
     setAgents((agentsResponse.data as AgentRow[]) || []);
+    setApplications((applicationsResponse.data as AgentApplicationRow[]) || []);
     setQuotes((quotesResponse.data as QuoteRow[]) || []);
     setBookings((bookingsResponse.data as BookingRow[]) || []);
     setLogs((logsResponse.data as ActivityLogRow[]) || []);
@@ -496,7 +584,7 @@ export default function AdminAgentsPage() {
   }, [supabase]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, [loadData]);
 
   const aggregateMap = useMemo(
@@ -536,6 +624,8 @@ export default function AdminAgentsPage() {
       const haystack = [
         agent.company_name,
         agent.contact_name,
+        agent.contact_person,
+        agent.approval_status,
         agent.email,
         agent.phone,
         agent.gst_number,
@@ -554,21 +644,59 @@ export default function AdminAgentsPage() {
     });
   }, [enrichedAgents, search, statusFilter]);
 
+  const pendingApplications = useMemo(() => {
+    return applications.filter((item) => item.status === "pending");
+  }, [applications]);
+
+  const filteredPendingApplications = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    return pendingApplications.filter((application) => {
+      const haystack = [
+        application.company_name,
+        application.contact_person,
+        application.email,
+        application.phone,
+        application.city,
+        application.country,
+        application.business_type,
+        application.specialization,
+        application.status,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return term.length === 0 || haystack.includes(term);
+    });
+  }, [pendingApplications, search]);
+
   const selectedAgent = useMemo(() => {
     return enrichedAgents.find((agent) => agent.id === selectedAgentId) || null;
   }, [enrichedAgents, selectedAgentId]);
+
+  const pendingApplicationsByEmail = useMemo(() => {
+    const map = new Map<string, AgentApplicationRow>();
+
+    for (const item of applications) {
+      if (item.status !== "pending") continue;
+      map.set(item.email.trim().toLowerCase(), item);
+    }
+
+    return map;
+  }, [applications]);
 
   const totals = useMemo(() => {
     return {
       totalAgents: agents.length,
       approvedAgents: agents.filter((agent) => agent.status === "approved").length,
-      pendingAgents: agents.filter((agent) => agent.status === "pending").length,
+      pendingAgents: pendingApplications.length,
       projectedRevenue: enrichedAgents.reduce(
         (sum, agent) => sum + agent.aggregate.projectedRevenue,
         0,
       ),
     };
-  }, [agents, enrichedAgents]);
+  }, [agents, enrichedAgents, pendingApplications]);
 
   useEffect(() => {
     if (selectedAgent && activeTab === "manage" && !isEditingManage) {
@@ -577,6 +705,15 @@ export default function AdminAgentsPage() {
       setManageSuccess("");
     }
   }, [selectedAgent, activeTab, isEditingManage]);
+
+  async function copyText(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setSuccessMessage("Copied to clipboard.");
+    } catch {
+      setErrorMessage("Could not copy to clipboard.");
+    }
+  }
 
   async function insertActivityLog(
     agentId: string,
@@ -597,10 +734,176 @@ export default function AdminAgentsPage() {
     }
   }
 
+  async function approvePendingApplication(application: AgentApplicationRow) {
+    try {
+      setActionLoadingId(application.id);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const res = await fetch("/api/admin/agents/approve", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          applicationId: application.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to approve application.");
+      }
+
+      if (data.temporaryPassword && data.email) {
+        setCredentialModal({
+          email: data.email,
+          temporaryPassword: data.temporaryPassword,
+          companyName: application.company_name,
+        });
+      }
+
+      setSuccessMessage(`Application approved for ${application.company_name}.`);
+      await loadData();
+    } catch (error: any) {
+      setErrorMessage(error?.message || "Failed to approve application.");
+      setSuccessMessage("");
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function rejectPendingApplication(application: AgentApplicationRow) {
+    try {
+      setActionLoadingId(application.id);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const res = await fetch("/api/admin/agents/reject", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          applicationId: application.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to reject application.");
+      }
+
+      setSuccessMessage(`Application rejected for ${application.company_name}.`);
+      await loadData();
+    } catch (error: any) {
+      setErrorMessage(error?.message || "Failed to reject application.");
+      setSuccessMessage("");
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function approveApplication(agent: AgentRow) {
+    try {
+      setActionLoadingId(agent.id);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const email = (agent.email || "").trim().toLowerCase();
+      const application = pendingApplicationsByEmail.get(email);
+
+      if (!application?.id) {
+        throw new Error("No pending onboarding application found for this agent email.");
+      }
+
+      const res = await fetch("/api/admin/agents/approve", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          applicationId: application.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to approve application.");
+      }
+
+      if (data.temporaryPassword) {
+        setTemporaryPasswords((prev) => ({
+          ...prev,
+          [agent.id]: data.temporaryPassword,
+        }));
+      }
+
+      if (data.temporaryPassword && data.email) {
+        setCredentialModal({
+          email: data.email,
+          temporaryPassword: data.temporaryPassword,
+          companyName: agent.company_name,
+        });
+      }
+
+      setSuccessMessage(`Application approved for ${agent.company_name}.`);
+      await loadData();
+    } catch (error: any) {
+      setErrorMessage(error?.message || "Failed to approve application.");
+      setSuccessMessage("");
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function rejectApplication(agent: AgentRow) {
+    try {
+      setActionLoadingId(agent.id);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const email = (agent.email || "").trim().toLowerCase();
+      const application = pendingApplicationsByEmail.get(email);
+
+      if (!application?.id) {
+        throw new Error("No pending onboarding application found for this agent email.");
+      }
+
+      const res = await fetch("/api/admin/agents/reject", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          applicationId: application.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to reject application.");
+      }
+
+      setSuccessMessage(`Application rejected for ${agent.company_name}.`);
+      await loadData();
+    } catch (error: any) {
+      setErrorMessage(error?.message || "Failed to reject application.");
+      setSuccessMessage("");
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
   async function updateAgentStatus(agentId: string, nextStatus: AgentStatus) {
     try {
       setActionLoadingId(agentId);
       setErrorMessage("");
+      setSuccessMessage("");
 
       const response = await supabase
         .from("agents")
@@ -626,9 +929,11 @@ export default function AdminAgentsPage() {
         next_status: nextStatus,
       });
 
+      setSuccessMessage("Agent status updated successfully.");
       await loadData();
     } catch (error: any) {
       setErrorMessage(error?.message || "Failed to update agent status.");
+      setSuccessMessage("");
     } finally {
       setActionLoadingId(null);
     }
@@ -638,6 +943,7 @@ export default function AdminAgentsPage() {
     try {
       setActionLoadingId(agentId);
       setErrorMessage("");
+      setSuccessMessage("");
 
       const notesPrefix = `Password reset requested on ${formatDate(
         new Date().toISOString(),
@@ -648,9 +954,7 @@ export default function AdminAgentsPage() {
       const response = await supabase
         .from("agents")
         .update({
-          notes: currentAgent?.notes
-            ? `${notesPrefix} ${currentAgent.notes}`
-            : notesPrefix,
+          notes: currentAgent?.notes ? `${notesPrefix} ${currentAgent.notes}` : notesPrefix,
           last_activity_at: new Date().toISOString(),
         })
         .eq("id", agentId);
@@ -661,9 +965,11 @@ export default function AdminAgentsPage() {
 
       await insertActivityLog(agentId, "password_reset_requested", {});
 
+      setSuccessMessage("Password reset request recorded.");
       await loadData();
     } catch (error: any) {
       setErrorMessage(error?.message || "Failed to record password reset.");
+      setSuccessMessage("");
     } finally {
       setActionLoadingId(null);
     }
@@ -711,6 +1017,7 @@ export default function AdminAgentsPage() {
       const payload = {
         company_name: manageForm.company_name.trim(),
         contact_name: normalizeFormValue(manageForm.contact_name),
+        contact_person: normalizeFormValue(manageForm.contact_name),
         email: normalizeFormValue(manageForm.email),
         phone: normalizeFormValue(manageForm.phone),
         logo_url: normalizeFormValue(manageForm.logo_url),
@@ -766,13 +1073,10 @@ export default function AdminAgentsPage() {
           <StatCard label="Total agents" value={String(totals.totalAgents)} />
           <StatCard label="Approved" value={String(totals.approvedAgents)} />
           <StatCard label="Pending approvals" value={String(totals.pendingAgents)} />
-          <StatCard
-            label="Projected revenue"
-            value={currency.format(totals.projectedRevenue)}
-          />
+          <StatCard label="Projected revenue" value={currency.format(totals.projectedRevenue)} />
         </div>
 
-        <InfoPanel title="Agent Business Table">
+        <InfoPanel title="Pending Onboarding Applications">
           <div className="space-y-5">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div className="relative w-full max-w-[760px]">
@@ -780,38 +1084,20 @@ export default function AdminAgentsPage() {
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by company, contact, email, phone, GST, city, state, or status"
+                  placeholder="Search by company, contact, email, phone, city, country, business type, or specialization"
                   className="h-14 w-full rounded-[20px] border border-slate-200 bg-white pl-12 pr-4 text-[15px] text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-300"
                 />
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {(["all", "pending", "approved", "paused", "rejected"] as const).map(
-                  (item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() => setStatusFilter(item)}
-                      className={cn(
-                        "rounded-full border px-4 py-2 text-sm font-medium transition",
-                        statusFilter === item
-                          ? "border-orange-500 bg-orange-500 text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                      )}
-                    >
-                      {item === "all"
-                        ? "All"
-                        : item.charAt(0).toUpperCase() + item.slice(1)}
-                    </button>
-                  ),
-                )}
-
                 <button
                   type="button"
                   onClick={() => {
                     setSearch("");
                     setStatusFilter("all");
-                    loadData();
+                    setErrorMessage("");
+                    setSuccessMessage("");
+                    void loadData();
                   }}
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white"
                 >
@@ -827,9 +1113,173 @@ export default function AdminAgentsPage() {
               </div>
             ) : null}
 
+            {successMessage ? (
+              <div className="rounded-[20px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                {successMessage}
+              </div>
+            ) : null}
+
             <div className="overflow-hidden rounded-[24px] border border-slate-200">
               <div className="overflow-x-auto">
-                <table className="min-w-[1520px] w-full">
+                <table className="w-full min-w-[1320px]">
+                  <thead className="bg-slate-50">
+                    <tr className="text-left text-sm font-semibold text-slate-500">
+                      <th className="px-5 py-4">Agency</th>
+                      <th className="px-5 py-4">Status</th>
+                      <th className="px-5 py-4">Contact</th>
+                      <th className="px-5 py-4">Location</th>
+                      <th className="px-5 py-4">Business Type</th>
+                      <th className="px-5 py-4">Specialization</th>
+                      <th className="px-5 py-4">Experience</th>
+                      <th className="px-5 py-4">Submitted</th>
+                      <th className="px-5 py-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {loading ? (
+                      <tr>
+                        <td colSpan={9} className="px-6 py-12 text-center text-sm text-slate-500">
+                          Loading applications...
+                        </td>
+                      </tr>
+                    ) : filteredPendingApplications.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="px-6 py-12 text-center text-sm text-slate-500">
+                          No pending onboarding applications found.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredPendingApplications.map((application) => {
+                        const isBusy = actionLoadingId === application.id;
+
+                        return (
+                          <tr key={application.id} className="align-top">
+                            <td className="px-5 py-5">
+                              <div className="flex items-start gap-4">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 font-semibold text-slate-900">
+                                  {(application.company_name || "AG")
+                                    .split(" ")
+                                    .slice(0, 2)
+                                    .map((part) => part[0])
+                                    .join("")}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-slate-950">
+                                    {application.company_name || "Unnamed Agency"}
+                                  </p>
+                                  <p className="mt-1 text-sm text-slate-600">
+                                    {application.contact_person || "—"}
+                                  </p>
+                                  {application.notes ? (
+                                    <p className="mt-2 max-w-[320px] text-sm text-slate-500">
+                                      {application.notes}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="px-5 py-5">
+                              <span
+                                className={cn(
+                                  "inline-flex rounded-full border px-3 py-1 text-xs font-semibold capitalize",
+                                  getApplicationStatusClasses(application.status),
+                                )}
+                              >
+                                {application.status}
+                              </span>
+                            </td>
+
+                            <td className="px-5 py-5">
+                              <div className="space-y-1 text-sm text-slate-700">
+                                <p>{application.email || "—"}</p>
+                                <p>{application.phone || "—"}</p>
+                              </div>
+                            </td>
+
+                            <td className="px-5 py-5 text-sm text-slate-700">
+                              {[application.city, application.country].filter(Boolean).join(", ") || "—"}
+                            </td>
+
+                            <td className="px-5 py-5 text-sm text-slate-700">
+                              {application.business_type || "—"}
+                            </td>
+
+                            <td className="px-5 py-5 text-sm text-slate-700">
+                              {application.specialization || "—"}
+                            </td>
+
+                            <td className="px-5 py-5 text-sm text-slate-700">
+                              <div>{application.years_experience ?? "—"} years</div>
+                              <div className="mt-1 text-slate-500">
+                                {application.monthly_booking_volume || "—"}
+                              </div>
+                            </td>
+
+                            <td className="px-5 py-5 text-sm text-slate-700">
+                              {formatDate(application.submitted_at || application.created_at)}
+                            </td>
+
+                            <td className="px-5 py-5">
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() => void approvePendingApplication(application)}
+                                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-200 text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50"
+                                  title="Approve"
+                                >
+                                  <CheckCircle2 className="h-5 w-5" />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() => void rejectPendingApplication(application)}
+                                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-rose-200 text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
+                                  title="Reject"
+                                >
+                                  <XCircle className="h-5 w-5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </InfoPanel>
+
+        <InfoPanel title="Agent Business Table">
+          <div className="space-y-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-wrap gap-2">
+                {(["all", "pending", "approved", "paused", "rejected"] as const).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setStatusFilter(item)}
+                    className={cn(
+                      "rounded-full border px-4 py-2 text-sm font-medium transition",
+                      statusFilter === item
+                        ? "border-orange-500 bg-orange-500 text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                    )}
+                  >
+                    {item === "all" ? "All" : item.charAt(0).toUpperCase() + item.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-[24px] border border-slate-200">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1520px]">
                   <thead className="bg-slate-50">
                     <tr className="text-left text-sm font-semibold text-slate-500">
                       <th className="px-5 py-4">Agent</th>
@@ -877,11 +1327,20 @@ export default function AdminAgentsPage() {
                                     {agent.company_name || "Unnamed Agent"}
                                   </p>
                                   <p className="mt-1 text-sm text-slate-600">
-                                    {agent.contact_name || "—"}
+                                    {getAgentContact(agent)}
                                   </p>
                                   <p className="mt-1 text-sm text-slate-500">
                                     {agent.city || "—"}, {agent.state || "—"}
                                   </p>
+
+                                  {temporaryPasswords[agent.id] ? (
+                                    <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                                      Temp password:{" "}
+                                      <span className="font-semibold">
+                                        {temporaryPasswords[agent.id]}
+                                      </span>
+                                    </div>
+                                  ) : null}
                                 </div>
                               </div>
                             </td>
@@ -968,11 +1427,11 @@ export default function AdminAgentsPage() {
                                   <Eye className="h-5 w-5" />
                                 </button>
 
-                                {agent.status !== "approved" ? (
+                                {agent.status === "pending" ? (
                                   <button
                                     type="button"
                                     disabled={isBusy}
-                                    onClick={() => updateAgentStatus(agent.id, "approved")}
+                                    onClick={() => void approveApplication(agent)}
                                     className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-200 text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50"
                                     title="Approve"
                                   >
@@ -984,7 +1443,7 @@ export default function AdminAgentsPage() {
                                   <button
                                     type="button"
                                     disabled={isBusy}
-                                    onClick={() => updateAgentStatus(agent.id, "paused")}
+                                    onClick={() => void updateAgentStatus(agent.id, "paused")}
                                     className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                                     title="Pause"
                                   >
@@ -994,7 +1453,7 @@ export default function AdminAgentsPage() {
                                   <button
                                     type="button"
                                     disabled={isBusy}
-                                    onClick={() => updateAgentStatus(agent.id, "approved")}
+                                    onClick={() => void updateAgentStatus(agent.id, "approved")}
                                     className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                                     title="Resume"
                                   >
@@ -1002,11 +1461,11 @@ export default function AdminAgentsPage() {
                                   </button>
                                 )}
 
-                                {agent.status !== "rejected" ? (
+                                {agent.status === "pending" ? (
                                   <button
                                     type="button"
                                     disabled={isBusy}
-                                    onClick={() => updateAgentStatus(agent.id, "rejected")}
+                                    onClick={() => void rejectApplication(agent)}
                                     className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-rose-200 text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
                                     title="Reject"
                                   >
@@ -1017,7 +1476,7 @@ export default function AdminAgentsPage() {
                                 <button
                                   type="button"
                                   disabled={isBusy}
-                                  onClick={() => handleResetPassword(agent.id)}
+                                  onClick={() => void handleResetPassword(agent.id)}
                                   className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                                   title="Reset Password"
                                 >
@@ -1058,33 +1517,53 @@ export default function AdminAgentsPage() {
                     </span>
                   </div>
                   <p className="mt-2 text-sm text-slate-600">
-                    {selectedAgent.contact_name || "—"} · {selectedAgent.email || "—"} ·{" "}
+                    {getAgentContact(selectedAgent)} · {selectedAgent.email || "—"} ·{" "}
                     {selectedAgent.phone || "—"}
                   </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
+                  {selectedAgent.status === "pending" ? (
+                    <button
+                      type="button"
+                      onClick={() => void approveApplication(selectedAgent)}
+                      className="rounded-2xl border border-emerald-200 px-4 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50"
+                    >
+                      Approve
+                    </button>
+                  ) : null}
+
                   <button
                     type="button"
-                    onClick={() => updateAgentStatus(selectedAgent.id, "approved")}
-                    className="rounded-2xl border border-emerald-200 px-4 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateAgentStatus(selectedAgent.id, "paused")}
+                    onClick={() =>
+                      void updateAgentStatus(
+                        selectedAgent.id,
+                        selectedAgent.status === "paused" ? "approved" : "paused",
+                      )
+                    }
                     className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                   >
-                    Pause
+                    {selectedAgent.status === "paused" ? "Resume" : "Pause"}
                   </button>
+
+                  {selectedAgent.status === "pending" ? (
+                    <button
+                      type="button"
+                      onClick={() => void rejectApplication(selectedAgent)}
+                      className="rounded-2xl border border-rose-200 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-50"
+                    >
+                      Reject
+                    </button>
+                  ) : null}
+
                   <button
                     type="button"
-                    onClick={() => handleResetPassword(selectedAgent.id)}
+                    onClick={() => void handleResetPassword(selectedAgent.id)}
                     className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                   >
                     Reset Password
                   </button>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -1174,8 +1653,14 @@ export default function AdminAgentsPage() {
                         <DetailCard label="GST Number" value={selectedAgent.gst_number || "—"} />
                         <DetailCard label="PAN Number" value={selectedAgent.pan_number || "—"} />
                         <DetailCard label="Website" value={selectedAgent.website || "—"} />
-                        <DetailCard label="Support Email" value={selectedAgent.support_email || "—"} />
-                        <DetailCard label="Support Phone" value={selectedAgent.support_phone || "—"} />
+                        <DetailCard
+                          label="Support Email"
+                          value={selectedAgent.support_email || "—"}
+                        />
+                        <DetailCard
+                          label="Support Phone"
+                          value={selectedAgent.support_phone || "—"}
+                        />
                         <DetailCard
                           label="Business Address"
                           value={
@@ -1224,9 +1709,7 @@ export default function AdminAgentsPage() {
                       </div>
 
                       <div className="mt-5 rounded-[20px] border border-slate-200 bg-white p-4">
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
-                          Notes
-                        </p>
+                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Notes</p>
                         <p className="mt-2 text-sm leading-6 text-slate-700">
                           {selectedAgent.notes || "—"}
                         </p>
@@ -1432,7 +1915,7 @@ export default function AdminAgentsPage() {
                         <button
                           type="button"
                           disabled={manageSaveLoading}
-                          onClick={saveManageAgent}
+                          onClick={() => void saveManageAgent()}
                           className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
                         >
                           <Save className="h-4 w-4" />
@@ -1534,9 +2017,7 @@ export default function AdminAgentsPage() {
                           label="White-label Brand Name"
                           value={manageForm?.white_label_brand_name || ""}
                           disabled={!isEditingManage}
-                          onChange={(value) =>
-                            updateManageField("white_label_brand_name", value)
-                          }
+                          onChange={(value) => updateManageField("white_label_brand_name", value)}
                         />
                         <ManageInput
                           label="City"
@@ -1627,7 +2108,7 @@ export default function AdminAgentsPage() {
                           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                             <div>
                               <p className="text-sm font-semibold text-slate-950">
-                                {log.action}
+                                {log.activity_label || log.action}
                               </p>
                               <p className="mt-1 text-sm text-slate-600">
                                 {log.actor_name || "System"} · {log.actor_email || "—"}
@@ -1653,6 +2134,96 @@ export default function AdminAgentsPage() {
                   </div>
                 </div>
               ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {credentialModal ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-6">
+          <div className="w-full max-w-xl rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600">
+                  Agent credentials
+                </p>
+                <h3 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-950">
+                  {credentialModal.companyName}
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  Share these login details with the agent. The agent will be forced to change the
+                  password on first login.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCredentialModal(null)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-700 transition hover:bg-slate-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-6 py-6">
+              <div className="rounded-[20px] border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Email</p>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <p className="break-all text-sm font-medium text-slate-950">
+                    {credentialModal.email}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void copyText(credentialModal.email)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-[20px] border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-emerald-700">
+                  Temporary password
+                </p>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <p className="break-all text-sm font-semibold text-emerald-900">
+                    {credentialModal.temporaryPassword}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void copyText(credentialModal.temporaryPassword)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copyText(
+                      `Email: ${credentialModal.email}\nTemporary Password: ${credentialModal.temporaryPassword}`,
+                    );
+                  }}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy both
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCredentialModal(null)}
+                  className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         </div>
