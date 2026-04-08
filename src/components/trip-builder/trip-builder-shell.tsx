@@ -1,7 +1,6 @@
 "use client";
 
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   CalendarDays,
   ChevronRight,
@@ -27,10 +26,18 @@ import {
 } from "@/lib/mock/bangkok-builder-data";
 import { useTripBuilderStore } from "@/store/useTripBuilderStore";
 
+import { PortalShell } from "@/components/shared/portal-shell";
+import { AgentSidebar } from "@/components/agent/agent-sidebar";
+
 type DurationFilter = "all" | "4-5" | "6-7" | "8-9" | "10-11";
 type PriceFilter = "all" | "upto-40" | "40-55" | "55-75" | "75-plus";
 type HotelFilter = "all" | "3 Star" | "4 Star";
 type FlightFilter = "all" | "with-flight" | "without-flight";
+type TripBuilderShellProps = {
+  flowMode?: "customer_booking" | "agent_quote";
+  continueHref?: string;
+  chrome?: "public" | "agent";
+};
 type BuilderMode = "standard" | "ai" | "custom";
 
 type FamilyCard = {
@@ -214,8 +221,13 @@ const defaultRepresentativeByFamily = new Map(
     .map((pkg) => [pkg.packageFamilyId, pkg])
 );
 
-export function TripBuilderShell() {
-  const router = useRouter();
+export function TripBuilderShell({
+  flowMode = "customer_booking",
+  continueHref,
+  chrome = "public",
+}: TripBuilderShellProps) {
+  const resolvedContinueHref =
+    continueHref ?? (flowMode === "agent_quote" ? "/agent/quotes/review" : "/review");
 
   const setTripDetails = useTripBuilderStore((state) => state.setTripDetails);
   const setTravelers = useTripBuilderStore((state) => state.setTravelers);
@@ -499,9 +511,8 @@ export function TripBuilderShell() {
     setDetailPackageId(null);
   }
 
-  function handleContinueBooking() {
-    if (!selectedPackage) return;
-    router.push("/review");
+    function handleContinueBooking() {
+    window.location.assign(resolvedContinueHref);
   }
 
   function clearFilters() {
@@ -529,9 +540,9 @@ export function TripBuilderShell() {
     if (meta?.mood) setSpecialRequest(meta.mood);
   }
 
-  return (
+    const shellContent = (
     <div className="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#f7f3ee_0%,#f8fafc_48%,#ffffff_100%)] text-slate-950">
-      {!mobileSearchOpen && !mobileFiltersOpen ? <PublicHeader /> : null}
+      {chrome === "public" && !mobileSearchOpen && !mobileFiltersOpen ? <PublicHeader /> : null}
 
       <main className="pb-40 pt-24 sm:pt-28 lg:pt-36">
         <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -1044,11 +1055,11 @@ export function TripBuilderShell() {
           rooms={rooms}
           onClose={() => setDetailPackageId(null)}
           onChoose={() => {
-            setSelectedPackageId(detailPackage.id);
-            syncPackageToStore(detailPackage, detailPackage.includedFlights);
-            setDetailPackageId(null);
-            router.push("/review");
-          }}
+  setSelectedPackageId(detailPackage.id);
+  syncPackageToStore(detailPackage, detailPackage.includedFlights);
+  setDetailPackageId(null);
+  window.location.assign(resolvedContinueHref);
+}}
           onCustomize={() => handleCustomizePackage(detailPackage.id)}
         />
       ) : null}
@@ -1242,9 +1253,23 @@ export function TripBuilderShell() {
         </div>
       ) : null}
 
-      <PublicFooter />
+            {chrome === "public" ? <PublicFooter /> : null}
     </div>
   );
+
+  if (chrome === "agent") {
+    return (
+      <PortalShell
+        title="Create Quote"
+        subtitle="Build a customer quote using the shared trip builder flow."
+        sidebar={<AgentSidebar />}
+      >
+        {shellContent}
+      </PortalShell>
+    );
+  }
+
+  return shellContent;
 }
 
 function ModeCircle({
@@ -1904,5 +1929,6 @@ function MobileFilterField({
     </label>
   );
 }
+
 
 export default TripBuilderShell;
