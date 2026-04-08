@@ -19,10 +19,9 @@ export function PortalShell({
 }: PortalShellProps) {
   const [collapsed, setCollapsed] = useState(false);
 
-  const resolvedSidebar =
-    isValidElement(sidebar)
-      ? cloneElement(sidebar as ReactElement<{ collapsed?: boolean }>, { collapsed })
-      : sidebar;
+  const resolvedSidebar = isValidElement(sidebar)
+    ? cloneElement(sidebar as ReactElement<{ collapsed?: boolean }>, { collapsed })
+    : sidebar;
 
   return (
     <div className="h-screen overflow-hidden bg-[linear-gradient(180deg,#f7f3ee_0%,#f8fafc_52%,#ffffff_100%)] text-[#171717]">
@@ -30,9 +29,7 @@ export function PortalShell({
         <div
           className={[
             "grid h-full gap-5 transition-all duration-300",
-            collapsed
-              ? "xl:grid-cols-[96px_minmax(0,1fr)]"
-              : "xl:grid-cols-[290px_minmax(0,1fr)]",
+            collapsed ? "xl:grid-cols-[96px_minmax(0,1fr)]" : "xl:grid-cols-[290px_minmax(0,1fr)]",
           ].join(" ")}
         >
           <aside className="hidden h-full min-h-0 xl:block">
@@ -73,9 +70,7 @@ export function PortalShell({
                 </section>
               ) : null}
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
-                {children}
-              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">{children}</div>
             </div>
           </main>
         </div>
