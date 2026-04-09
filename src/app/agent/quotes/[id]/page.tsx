@@ -23,27 +23,76 @@ type AgentQuoteDetailPageProps = {
   }>;
 };
 
+type BuilderDayItem = {
+  id?: string | number;
+  type?: string;
+  title?: string;
+  name?: string;
+  label?: string;
+  time?: string;
+  notes?: string;
+  description?: string;
+  location?: string;
+  city?: string;
+};
+
+type BuilderTripDay = {
+  id?: string | number;
+  day?: number;
+  dayNumber?: number;
+  title?: string;
+  city?: string;
+  location?: string;
+  notes?: string;
+  summary?: string;
+  description?: string;
+  hotelName?: string;
+  transferName?: string;
+  meals?: BuilderDayItem[];
+  sightseeing?: BuilderDayItem[];
+  activities?: BuilderDayItem[];
+  transfers?: BuilderDayItem[];
+  items?: BuilderDayItem[];
+};
+
+type BuilderPayload = {
+  destination?: string;
+  departureCity?: string;
+  travelDates?: string;
+  nights?: string;
+  adults?: number;
+  children?: number;
+  selectedFlightLabel?: string;
+  customTripDays?: BuilderTripDay[];
+  selectedPackagePrice?: number;
+  hotelTotal?: number;
+  transferTotal?: number;
+  sightseeingTotal?: number;
+  mealsTotal?: number;
+  extrasTotal?: number;
+  notes?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+};
+
 type QuoteRow = {
   id: string;
   agent_id: string | null;
   quote_ref: string | null;
+  quote_name: string | null;
   destination: string | null;
-  departure_city: string | null;
-  travel_dates: string | null;
-  nights: string | null;
-  adults: number | null;
-  children: number | null;
+  amount: number | null;
   status: string | null;
-  total_amount: number | null;
   customer_name: string | null;
   customer_email: string | null;
   customer_phone: string | null;
-  notes: string | null;
-  flight_label: string | null;
+  customer_note: string | null;
+  internal_note: string | null;
   valid_till: string | null;
   pdf_url: string | null;
-  itinerary_json: unknown;
-  pricing_snapshot: unknown;
+  builder_payload: BuilderPayload | null;
+  pricing_snapshot: Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -59,38 +108,6 @@ type QuoteActivityRow = {
   actor_email: string | null;
   meta: Record<string, unknown> | null;
   created_at: string | null;
-};
-
-type DayItem = {
-  id?: string | number;
-  type?: string;
-  title?: string;
-  name?: string;
-  label?: string;
-  time?: string;
-  notes?: string;
-  description?: string;
-  location?: string;
-  city?: string;
-};
-
-type TripDay = {
-  id?: string | number;
-  day?: number;
-  dayNumber?: number;
-  title?: string;
-  city?: string;
-  location?: string;
-  notes?: string;
-  summary?: string;
-  description?: string;
-  hotelName?: string;
-  transferName?: string;
-  meals?: DayItem[];
-  sightseeing?: DayItem[];
-  activities?: DayItem[];
-  transfers?: DayItem[];
-  items?: DayItem[];
 };
 
 type PricingShape = {
@@ -160,6 +177,7 @@ function normalizeStatus(status: string | null | undefined) {
   if (value === "expired") return "Expired";
   if (value === "sent") return "Sent";
   if (value === "paid") return "Paid";
+  if (value === "pending") return "Pending";
 
   return "Draft";
 }
@@ -174,6 +192,7 @@ function getStatusClasses(status: string | null | undefined) {
   if (value === "converted") return "border-teal-200 bg-teal-50 text-teal-700";
   if (value === "sent") return "border-sky-200 bg-sky-50 text-sky-700";
   if (value === "paid") return "border-violet-200 bg-violet-50 text-violet-700";
+  if (value === "pending") return "border-amber-200 bg-amber-50 text-amber-700";
   if (value === "rejected" || value === "discarded" || value === "expired") {
     return "border-rose-200 bg-rose-50 text-rose-700";
   }
@@ -185,13 +204,13 @@ function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
-function normalizeDayItems(day: TripDay) {
+function normalizeDayItems(day: BuilderTripDay) {
   const merged = [
-    ...asArray<DayItem>(day.sightseeing),
-    ...asArray<DayItem>(day.activities),
-    ...asArray<DayItem>(day.transfers),
-    ...asArray<DayItem>(day.meals),
-    ...asArray<DayItem>(day.items),
+    ...asArray<BuilderDayItem>(day.sightseeing),
+    ...asArray<BuilderDayItem>(day.activities),
+    ...asArray<BuilderDayItem>(day.transfers),
+    ...asArray<BuilderDayItem>(day.meals),
+    ...asArray<BuilderDayItem>(day.items),
   ];
 
   return merged.map((item, index) => ({
@@ -240,32 +259,31 @@ export default async function AgentQuoteDetailPage({
         id,
         agent_id,
         quote_ref,
+        quote_name,
         destination,
-        departure_city,
-        travel_dates,
-        nights,
-        adults,
-        children,
+        amount,
         status,
-        total_amount,
         customer_name,
         customer_email,
         customer_phone,
-        notes,
-        flight_label,
+        customer_note,
+        internal_note,
         valid_till,
         pdf_url,
-        itinerary_json,
+        builder_payload,
         pricing_snapshot,
         created_at,
         updated_at
       `,
     )
     .eq("id", id)
-    .eq("agent_id", agent.id)
-    .single();
+    .maybeSingle();
 
   if (quoteError || !quote) {
+    notFound();
+  }
+
+  if (quote.agent_id !== agent.id) {
     notFound();
   }
 
@@ -289,25 +307,32 @@ export default async function AgentQuoteDetailPage({
     .order("created_at", { ascending: false })
     .limit(20);
 
-  const itinerary = asArray<TripDay>(quote.itinerary_json);
+  const builderPayload = (quote.builder_payload || {}) as BuilderPayload;
   const pricing = ((quote.pricing_snapshot || {}) as PricingShape) || {};
   const activities = ((activityRows || []) as QuoteActivityRow[]) || [];
+  const itinerary = asArray<BuilderTripDay>(builderPayload.customTripDays);
 
-  const hotelTotal = safeNumber(pricing.hotelTotal);
-  const transferTotal = safeNumber(pricing.transferTotal);
-  const sightseeingTotal = safeNumber(pricing.sightseeingTotal);
-  const mealsTotal = safeNumber(pricing.mealsTotal);
-  const extrasTotal = safeNumber(pricing.extrasTotal);
+  const destination = quote.destination || builderPayload.destination || "—";
+  const departureCity = builderPayload.departureCity || "—";
+  const travelDates = builderPayload.travelDates || "—";
+  const nights = builderPayload.nights || "—";
+  const flightLabel = builderPayload.selectedFlightLabel || "—";
+  const adults = safeNumber(builderPayload.adults);
+  const children = safeNumber(builderPayload.children);
+
+  const hotelTotal = safeNumber(pricing.hotelTotal ?? builderPayload.hotelTotal);
+  const transferTotal = safeNumber(pricing.transferTotal ?? builderPayload.transferTotal);
+  const sightseeingTotal = safeNumber(pricing.sightseeingTotal ?? builderPayload.sightseeingTotal);
+  const mealsTotal = safeNumber(pricing.mealsTotal ?? builderPayload.mealsTotal);
+  const extrasTotal = safeNumber(pricing.extrasTotal ?? builderPayload.extrasTotal);
   const serviceFee = safeNumber(pricing.serviceFee);
   const markupTotal = safeNumber(pricing.markupTotal);
   const grandTotal = safeNumber(
-    pricing.grandTotal ?? pricing.finalTotal ?? pricing.total ?? quote.total_amount,
+    pricing.grandTotal ?? pricing.finalTotal ?? pricing.total ?? quote.amount,
   );
 
-  const travellerText = `${safeNumber(quote.adults)} Adult${safeNumber(quote.adults) === 1 ? "" : "s"}${
-    safeNumber(quote.children) > 0
-      ? ` · ${safeNumber(quote.children)} Child${safeNumber(quote.children) === 1 ? "" : "ren"}`
-      : ""
+  const travellerText = `${adults} Adult${adults === 1 ? "" : "s"}${
+    children > 0 ? ` · ${children} Child${children === 1 ? "" : "ren"}` : ""
   }`;
 
   return (
@@ -365,11 +390,20 @@ export default async function AgentQuoteDetailPage({
 
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Quote Name
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-slate-950">
+                    {quote.quote_name || destination}
+                  </p>
+                </div>
+
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                     Destination
                   </p>
                   <p className="mt-2 flex items-center gap-2 text-base font-semibold text-slate-950">
                     <MapPin className="h-4 w-4 text-slate-500" />
-                    {quote.destination || "—"}
+                    {destination}
                   </p>
                 </div>
 
@@ -379,7 +413,7 @@ export default async function AgentQuoteDetailPage({
                   </p>
                   <p className="mt-2 flex items-center gap-2 text-base font-semibold text-slate-950">
                     <CalendarDays className="h-4 w-4 text-slate-500" />
-                    {quote.travel_dates || "—"}
+                    {travelDates}
                   </p>
                 </div>
 
@@ -389,7 +423,7 @@ export default async function AgentQuoteDetailPage({
                   </p>
                   <p className="mt-2 flex items-center gap-2 text-base font-semibold text-slate-950">
                     <Clock3 className="h-4 w-4 text-slate-500" />
-                    {quote.nights || "—"}
+                    {nights}
                   </p>
                 </div>
 
@@ -407,7 +441,7 @@ export default async function AgentQuoteDetailPage({
                     Flight / Origin
                   </p>
                   <p className="mt-2 text-base font-semibold text-slate-950">
-                    {[quote.flight_label, quote.departure_city].filter(Boolean).join(" · ") || "—"}
+                    {[flightLabel, departureCity].filter(Boolean).join(" · ") || "—"}
                   </p>
                 </div>
 
@@ -439,12 +473,21 @@ export default async function AgentQuoteDetailPage({
                 </div>
               </div>
 
-              {quote.notes ? (
+              {quote.internal_note ? (
                 <div className="mt-5 rounded-[24px] border border-slate-200 bg-white p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                     Internal Notes
                   </p>
-                  <p className="mt-3 text-sm leading-6 text-slate-700">{quote.notes}</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-700">{quote.internal_note}</p>
+                </div>
+              ) : null}
+
+              {quote.customer_note ? (
+                <div className="mt-5 rounded-[24px] border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Customer Note
+                  </p>
+                  <p className="mt-3 text-sm leading-6 text-slate-700">{quote.customer_note}</p>
                 </div>
               ) : null}
             </InfoPanel>
@@ -457,7 +500,7 @@ export default async function AgentQuoteDetailPage({
                     Name
                   </div>
                   <p className="mt-3 text-base font-semibold text-slate-950">
-                    {quote.customer_name || "—"}
+                    {quote.customer_name || builderPayload.customerName || "—"}
                   </p>
                 </div>
 
@@ -467,7 +510,7 @@ export default async function AgentQuoteDetailPage({
                     Email
                   </div>
                   <p className="mt-3 text-base font-semibold text-slate-950">
-                    {quote.customer_email || "—"}
+                    {quote.customer_email || builderPayload.customerEmail || "—"}
                   </p>
                 </div>
 
@@ -477,7 +520,7 @@ export default async function AgentQuoteDetailPage({
                     Phone
                   </div>
                   <p className="mt-3 text-base font-semibold text-slate-950">
-                    {quote.customer_phone || "—"}
+                    {quote.customer_phone || builderPayload.customerPhone || "—"}
                   </p>
                 </div>
               </div>
@@ -490,7 +533,7 @@ export default async function AgentQuoteDetailPage({
                     No itinerary data saved.
                   </p>
                   <p className="mt-2 text-sm text-slate-600">
-                    `itinerary_json` is empty for this quote.
+                    `builder_payload.customTripDays` is empty for this quote.
                   </p>
                 </div>
               ) : (
@@ -640,7 +683,7 @@ export default async function AgentQuoteDetailPage({
                     {formatCurrency(grandTotal)}
                   </p>
                   <p className="mt-2 text-sm text-slate-600">
-                    Saved from `pricing_snapshot` / `total_amount`.
+                    Saved from `pricing_snapshot` / `amount`.
                   </p>
                 </div>
 
