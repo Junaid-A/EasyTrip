@@ -84,6 +84,10 @@ type QuoteRow = {
   quote_name: string | null;
   destination: string | null;
   amount: number | null;
+  amount_received: number | null;
+  additional_expense_total: number | null;
+  balance_due: number | null;
+  payment_status: string | null;
   status: string | null;
   customer_name: string | null;
   customer_email: string | null;
@@ -108,6 +112,24 @@ type QuoteActivityRow = {
   actor_name: string | null;
   actor_email: string | null;
   meta: Record<string, unknown> | null;
+  created_at: string | null;
+};
+
+type QuotePaymentRow = {
+  id: string;
+  amount: number | null;
+  payment_mode: string | null;
+  payment_date: string | null;
+  note: string | null;
+  entered_by: string | null;
+  created_at: string | null;
+};
+
+type QuoteExpenseRow = {
+  id: string;
+  label: string | null;
+  amount: number | null;
+  note: string | null;
   created_at: string | null;
 };
 
@@ -179,6 +201,7 @@ function normalizeStatus(status: string | null | undefined) {
   if (value === "sent") return "Sent";
   if (value === "paid") return "Paid";
   if (value === "pending") return "Pending";
+  if (value === "partially_paid") return "Partially Paid";
   if (value === "draft") return "Draft";
 
   return "Draft";
@@ -194,6 +217,7 @@ function getStatusClasses(status: string | null | undefined) {
   if (value === "converted") return "border-teal-200 bg-teal-50 text-teal-700";
   if (value === "sent") return "border-sky-200 bg-sky-50 text-sky-700";
   if (value === "paid") return "border-violet-200 bg-violet-50 text-violet-700";
+  if (value === "partially_paid") return "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700";
   if (value === "pending") return "border-amber-200 bg-amber-50 text-amber-700";
   if (value === "rejected" || value === "discarded" || value === "expired") {
     return "border-rose-200 bg-rose-50 text-rose-700";
@@ -264,6 +288,10 @@ export default async function AgentQuoteDetailPage({
         quote_name,
         destination,
         amount,
+        amount_received,
+        additional_expense_total,
+        balance_due,
+        payment_status,
         status,
         customer_name,
         customer_email,
@@ -289,29 +317,63 @@ export default async function AgentQuoteDetailPage({
     notFound();
   }
 
-  const { data: activityRows } = await supabase
-    .from("quote_activity_logs")
-    .select(
-      `
-        id,
-        quote_id,
-        agent_id,
-        action,
-        activity_type,
-        activity_label,
-        actor_name,
-        actor_email,
-        meta,
-        created_at
-      `,
-    )
-    .eq("quote_id", quote.id)
-    .order("created_at", { ascending: false })
-    .limit(20);
+  const [{ data: activityRows }, { data: paymentRows }, { data: expenseRows }] = await Promise.all([
+    supabase
+      .from("quote_activity_logs")
+      .select(
+        `
+          id,
+          quote_id,
+          agent_id,
+          action,
+          activity_type,
+          activity_label,
+          actor_name,
+          actor_email,
+          meta,
+          created_at
+        `,
+      )
+      .eq("quote_id", quote.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+
+    supabase
+      .from("quote_payments")
+      .select(
+        `
+          id,
+          amount,
+          payment_mode,
+          payment_date,
+          note,
+          entered_by,
+          created_at
+        `,
+      )
+      .eq("quote_id", quote.id)
+      .order("created_at", { ascending: false }),
+
+    supabase
+      .from("quote_expenses")
+      .select(
+        `
+          id,
+          label,
+          amount,
+          note,
+          created_at
+        `,
+      )
+      .eq("quote_id", quote.id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   const builderPayload = (quote.builder_payload || {}) as BuilderPayload;
   const pricing = ((quote.pricing_snapshot || {}) as PricingShape) || {};
   const activities = ((activityRows || []) as QuoteActivityRow[]) || [];
+  const payments = ((paymentRows || []) as QuotePaymentRow[]) || [];
+  const expenses = ((expenseRows || []) as QuoteExpenseRow[]) || [];
   const itinerary = asArray<BuilderTripDay>(builderPayload.customTripDays);
 
   const destination = quote.destination || builderPayload.destination || "—";
@@ -329,8 +391,13 @@ export default async function AgentQuoteDetailPage({
   const extrasTotal = safeNumber(pricing.extrasTotal ?? builderPayload.extrasTotal);
   const serviceFee = safeNumber(pricing.serviceFee);
   const markupTotal = safeNumber(pricing.markupTotal);
+  const quoteBaseAmount = safeNumber(quote.amount);
+  const additionalExpenseTotal = safeNumber(quote.additional_expense_total);
+  const amountReceived = safeNumber(quote.amount_received);
+  const balanceDue = safeNumber(quote.balance_due);
+  const finalQuoteTotal = quoteBaseAmount + additionalExpenseTotal;
   const grandTotal = safeNumber(
-    pricing.grandTotal ?? pricing.finalTotal ?? pricing.total ?? quote.amount,
+    pricing.grandTotal ?? pricing.finalTotal ?? pricing.total ?? finalQuoteTotal,
   );
 
   const travellerText = `${adults} Adult${adults === 1 ? "" : "s"}${
@@ -363,6 +430,10 @@ export default async function AgentQuoteDetailPage({
               {normalizeStatus(quote.status)}
             </span>
 
+            <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+              {quote.payment_status || "unpaid"}
+            </span>
+
             {quote.pdf_url ? (
               <a
                 href={quote.pdf_url}
@@ -377,7 +448,7 @@ export default async function AgentQuoteDetailPage({
           </div>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="space-y-6">
             <InfoPanel title="Quote Summary">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -528,6 +599,110 @@ export default async function AgentQuoteDetailPage({
               </div>
             </InfoPanel>
 
+            <InfoPanel title="Payment Ledger">
+              {payments.length === 0 ? (
+                <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
+                  <p className="text-base font-semibold text-slate-900">No payments recorded.</p>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Payments added from the detail action panel will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-[24px] border border-slate-200">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-200">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Date
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Mode
+                          </th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Amount
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Note
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 bg-white">
+                        {payments.map((payment) => (
+                          <tr key={payment.id}>
+                            <td className="px-4 py-4 text-sm text-slate-700">
+                              {formatDate(payment.payment_date || payment.created_at)}
+                            </td>
+                            <td className="px-4 py-4 text-sm text-slate-700">
+                              {payment.payment_mode || "—"}
+                            </td>
+                            <td className="px-4 py-4 text-right text-sm font-semibold text-slate-950">
+                              {formatCurrency(payment.amount)}
+                            </td>
+                            <td className="px-4 py-4 text-sm text-slate-700">
+                              {payment.note || payment.entered_by || "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </InfoPanel>
+
+            <InfoPanel title="Additional Expenses">
+              {expenses.length === 0 ? (
+                <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
+                  <p className="text-base font-semibold text-slate-900">No additional expenses.</p>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Any customer-requested extras added later will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-[24px] border border-slate-200">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-200">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Date
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Label
+                          </th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Amount
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Note
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 bg-white">
+                        {expenses.map((expense) => (
+                          <tr key={expense.id}>
+                            <td className="px-4 py-4 text-sm text-slate-700">
+                              {formatDate(expense.created_at)}
+                            </td>
+                            <td className="px-4 py-4 text-sm text-slate-700">
+                              {expense.label || "—"}
+                            </td>
+                            <td className="px-4 py-4 text-right text-sm font-semibold text-slate-950">
+                              {formatCurrency(expense.amount)}
+                            </td>
+                            <td className="px-4 py-4 text-sm text-slate-700">
+                              {expense.note || "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </InfoPanel>
+
             <InfoPanel title="Itinerary">
               {itinerary.length === 0 ? (
                 <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
@@ -675,82 +850,107 @@ export default async function AgentQuoteDetailPage({
 
           <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
             <InfoPanel title="Quote Actions">
-              <QuoteDetailActions quoteId={quote.id} currentStatus={quote.status} />
+              <QuoteDetailActions
+                quoteId={quote.id}
+                quoteRef={quote.quote_ref}
+                currentStatus={quote.status}
+                paymentStatus={quote.payment_status}
+                amount={quoteBaseAmount}
+                amountReceived={amountReceived}
+                additionalExpenseTotal={additionalExpenseTotal}
+                balanceDue={balanceDue}
+              />
             </InfoPanel>
 
-            <InfoPanel title="Pricing Snapshot">
+            <InfoPanel title="Financial Snapshot">
               <div className="space-y-4">
                 <div className="rounded-[26px] border border-orange-200 bg-[linear-gradient(180deg,#fff7ed_0%,#ffffff_100%)] p-5">
                   <div className="flex items-center gap-2 text-sm font-semibold text-orange-700">
                     <IndianRupee className="h-4 w-4" />
-                    Grand Total
+                    Final Quote Total
                   </div>
                   <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">
-                    {formatCurrency(grandTotal)}
+                    {formatCurrency(finalQuoteTotal)}
                   </p>
                   <p className="mt-2 text-sm text-slate-600">
-                    Saved from `pricing_snapshot` / `amount`.
+                    Base amount plus all additional recorded expenses.
                   </p>
                 </div>
 
                 <div className="rounded-[26px] border border-slate-200 bg-white p-4">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between text-sm text-slate-700">
-                      <span>Hotels</span>
+                      <span>Base Quote Amount</span>
                       <span className="font-semibold text-slate-950">
-                        {formatCurrency(hotelTotal)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm text-slate-700">
-                      <span>Transfers</span>
-                      <span className="font-semibold text-slate-950">
-                        {formatCurrency(transferTotal)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm text-slate-700">
-                      <span>Sightseeing</span>
-                      <span className="font-semibold text-slate-950">
-                        {formatCurrency(sightseeingTotal)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm text-slate-700">
-                      <span>Meals</span>
-                      <span className="font-semibold text-slate-950">
-                        {formatCurrency(mealsTotal)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm text-slate-700">
-                      <span>Extras</span>
-                      <span className="font-semibold text-slate-950">
-                        {formatCurrency(extrasTotal)}
+                        {formatCurrency(quoteBaseAmount)}
                       </span>
                     </div>
 
-                    {serviceFee > 0 ? (
-                      <div className="flex items-center justify-between text-sm text-slate-700">
-                        <span>Service Fee</span>
-                        <span className="font-semibold text-slate-950">
-                          {formatCurrency(serviceFee)}
-                        </span>
-                      </div>
-                    ) : null}
+                    <div className="flex items-center justify-between text-sm text-slate-700">
+                      <span>Additional Expenses</span>
+                      <span className="font-semibold text-slate-950">
+                        {formatCurrency(additionalExpenseTotal)}
+                      </span>
+                    </div>
 
-                    {markupTotal > 0 ? (
-                      <div className="flex items-center justify-between text-sm text-slate-700">
-                        <span>Markup</span>
-                        <span className="font-semibold text-slate-950">
-                          {formatCurrency(markupTotal)}
-                        </span>
-                      </div>
-                    ) : null}
+                    <div className="flex items-center justify-between text-sm text-slate-700">
+                      <span>Total Received</span>
+                      <span className="font-semibold text-slate-950">
+                        {formatCurrency(amountReceived)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-sm text-slate-700">
+                      <span>Balance Due</span>
+                      <span className="font-semibold text-slate-950">
+                        {formatCurrency(balanceDue)}
+                      </span>
+                    </div>
 
                     <div className="my-1 border-t border-dashed border-slate-200" />
 
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-slate-700">Grand Total</span>
+                      <span className="text-sm font-semibold text-slate-700">Pricing Snapshot</span>
                       <span className="text-lg font-semibold text-slate-950">
                         {formatCurrency(grandTotal)}
                       </span>
+                    </div>
+
+                    <div className="mt-3 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                      <div className="flex items-center justify-between">
+                        <span>Hotels</span>
+                        <span className="font-semibold text-slate-950">{formatCurrency(hotelTotal)}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between">
+                        <span>Transfers</span>
+                        <span className="font-semibold text-slate-950">{formatCurrency(transferTotal)}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between">
+                        <span>Sightseeing</span>
+                        <span className="font-semibold text-slate-950">{formatCurrency(sightseeingTotal)}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between">
+                        <span>Meals</span>
+                        <span className="font-semibold text-slate-950">{formatCurrency(mealsTotal)}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between">
+                        <span>Extras</span>
+                        <span className="font-semibold text-slate-950">{formatCurrency(extrasTotal)}</span>
+                      </div>
+
+                      {serviceFee > 0 ? (
+                        <div className="mt-2 flex items-center justify-between">
+                          <span>Service Fee</span>
+                          <span className="font-semibold text-slate-950">{formatCurrency(serviceFee)}</span>
+                        </div>
+                      ) : null}
+
+                      {markupTotal > 0 ? (
+                        <div className="mt-2 flex items-center justify-between">
+                          <span>Markup</span>
+                          <span className="font-semibold text-slate-950">{formatCurrency(markupTotal)}</span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>

@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-type QuoteAction = "approve" | "discard" | "recover";
-
-type ActionPayload = {
-  action?: QuoteAction;
+type SharePayload = {
+  channel?: "copy_link" | "whatsapp" | "email" | "manual";
 };
-
-function isValidAction(value: unknown): value is QuoteAction {
-  return value === "approve" || value === "discard" || value === "recover";
-}
 
 export async function POST(
   request: NextRequest,
@@ -29,7 +23,7 @@ export async function POST(
     }
 
     if (user.app_metadata?.role !== "agent") {
-      return NextResponse.json({ error: "Only agents can update quotes." }, { status: 403 });
+      return NextResponse.json({ error: "Only agents can share quotes." }, { status: 403 });
     }
 
     const { data: agent, error: agentError } = await supabase
@@ -39,25 +33,12 @@ export async function POST(
       .single();
 
     if (agentError || !agent?.id) {
-      return NextResponse.json(
-        {
-          error: "Agent record not found.",
-          details: agentError?.message || "No linked agent row found for this user.",
-        },
-        { status: 400 },
-      );
-    }
-
-    const body = (await request.json().catch(() => null)) as ActionPayload | null;
-    const action = body?.action;
-
-    if (!isValidAction(action)) {
-      return NextResponse.json({ error: "Invalid action." }, { status: 400 });
+      return NextResponse.json({ error: "Agent record not found." }, { status: 400 });
     }
 
     const { data: quote, error: quoteError } = await supabase
       .from("quotes")
-      .select("id, agent_id, quote_ref, status, destination")
+      .select("id, agent_id, quote_ref, destination, shared_channel_meta")
       .eq("id", id)
       .maybeSingle();
 
@@ -69,48 +50,23 @@ export async function POST(
       return NextResponse.json({ error: "You do not have access to this quote." }, { status: 403 });
     }
 
+    const body = (await request.json().catch(() => null)) as SharePayload | null;
+    const channel = body?.channel || "manual";
     const now = new Date().toISOString();
 
-    let updates: Record<string, unknown> = {};
-    let actionLabel = "";
-    let activityType = "";
-    let nextStatus = quote.status || "pending";
-
-    if (action === "approve") {
-      nextStatus = "approved";
-      updates = {
-        status: nextStatus,
-        approved_at: now,
-        discarded_at: null,
-      };
-      actionLabel = "Quote approved";
-      activityType = "approved";
-    }
-
-    if (action === "discard") {
-      nextStatus = "discarded";
-      updates = {
-        status: nextStatus,
-        discarded_at: now,
-      };
-      actionLabel = "Quote discarded";
-      activityType = "discarded";
-    }
-
-    if (action === "recover") {
-      nextStatus = "pending";
-      updates = {
-        status: nextStatus,
-        recovered_at: now,
-        discarded_at: null,
-      };
-      actionLabel = "Quote recovered";
-      activityType = "recovered";
-    }
+    const updatedMeta = {
+      ...(quote.shared_channel_meta || {}),
+      last_channel: channel,
+      last_shared_at: now,
+    };
 
     const { data: updatedQuote, error: updateError } = await supabase
       .from("quotes")
-      .update(updates)
+      .update({
+        status: "sent",
+        shared_at: now,
+        shared_channel_meta: updatedMeta,
+      })
       .eq("id", quote.id)
       .eq("agent_id", agent.id)
       .select("*")
@@ -119,7 +75,7 @@ export async function POST(
     if (updateError) {
       return NextResponse.json(
         {
-          error: "Failed to update quote.",
+          error: "Failed to update share status.",
           details: updateError.message,
         },
         { status: 500 },
@@ -134,28 +90,25 @@ export async function POST(
       user.email ||
       "Agent";
 
-    const logPayload = {
+    await supabase.from("quote_activity_logs").insert({
       quote_id: quote.id,
       agent_id: agent.id,
       actor_name: actorName,
       actor_email: user.email || null,
-      action,
-      activity_type: activityType,
-      activity_label: actionLabel,
+      action: "quote_shared",
+      activity_type: "shared",
+      activity_label: "Quote shared",
       meta: {
         quote_ref: quote.quote_ref,
-        status: nextStatus,
         destination: quote.destination,
+        channel,
       },
-    };
-
-    const { error: logError } = await supabase.from("quote_activity_logs").insert(logPayload);
+    });
 
     return NextResponse.json(
       {
         success: true,
         quote: updatedQuote,
-        log_saved: !logError,
       },
       { status: 200 },
     );
