@@ -16,20 +16,24 @@ import { InfoPanel } from "@/components/shared/info-panel";
 import { StatCard } from "@/components/shared/stat-card";
 import { createClient } from "@/lib/supabase/server";
 
+type QuoteBuilderPayload = {
+  departureCity?: string;
+  travelDates?: string;
+  nights?: string;
+  adults?: number;
+  children?: number;
+};
+
 type QuoteRow = {
   id: string;
   quote_ref: string | null;
   destination: string | null;
-  departure_city: string | null;
-  travel_dates: string | null;
-  nights: string | null;
-  adults: number | null;
-  children: number | null;
+  amount: number | null;
   status: string | null;
-  total_amount: number | null;
   customer_name: string | null;
   customer_email: string | null;
   customer_phone: string | null;
+  builder_payload: QuoteBuilderPayload | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -86,6 +90,7 @@ function normalizeStatus(status: string | null | undefined) {
   if (value === "cancelled") return "Cancelled";
   if (value === "expired") return "Expired";
   if (value === "rejected") return "Rejected";
+  if (value === "pending") return "Pending";
 
   return "Draft";
 }
@@ -109,7 +114,11 @@ function getStatusClasses(status: string | null | undefined) {
     return "border-rose-200 bg-rose-50 text-rose-700";
   }
 
-  return "border-amber-200 bg-amber-50 text-amber-700";
+  if (value === "pending") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+
+  return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
 function safeNumber(value: number | null | undefined) {
@@ -148,34 +157,31 @@ export default async function AgentQuotesPage({ searchParams }: AgentQuotesPageP
 
   const { data: quotesData, error: quotesError } = await supabase
     .from("quotes")
-    .select(
-      `
-        id,
-        quote_ref,
-        destination,
-        departure_city,
-        travel_dates,
-        nights,
-        adults,
-        children,
-        status,
-        total_amount,
-        customer_name,
-        customer_email,
-        customer_phone,
-        created_at,
-        updated_at
-      `,
-    )
+    .select(`
+      id,
+      quote_ref,
+      destination,
+      amount,
+      status,
+      customer_name,
+      customer_email,
+      customer_phone,
+      builder_payload,
+      created_at,
+      updated_at
+    `)
     .eq("agent_id", agent.id)
     .order("created_at", { ascending: false });
 
   const quotes = ((quotesData as QuoteRow[] | null) || []) as QuoteRow[];
 
   const totalQuotes = quotes.length;
-  const draftQuotes = quotes.filter((quote) => (quote.status || "draft").toLowerCase() === "draft").length;
+  const draftQuotes = quotes.filter((quote) => {
+    const value = (quote.status || "").toLowerCase();
+    return value === "draft" || value === "pending";
+  }).length;
   const approvedQuotes = quotes.filter((quote) => (quote.status || "").toLowerCase() === "approved").length;
-  const totalQuoteValue = quotes.reduce((sum, quote) => sum + safeNumber(quote.total_amount), 0);
+  const totalQuoteValue = quotes.reduce((sum, quote) => sum + safeNumber(quote.amount), 0);
 
   return (
     <PortalShell
@@ -274,9 +280,13 @@ export default async function AgentQuotesPage({ searchParams }: AgentQuotesPageP
 
                     <tbody className="divide-y divide-slate-200 bg-white">
                       {quotes.map((quote) => {
-                        const travellerText = `${safeNumber(quote.adults)}A${
-                          safeNumber(quote.children) > 0 ? ` · ${safeNumber(quote.children)}C` : ""
-                        }`;
+                        const payload = quote.builder_payload || {};
+                        const departureCity = payload.departureCity || "—";
+                        const travelDates = payload.travelDates || "—";
+                        const nights = payload.nights || "—";
+                        const adults = safeNumber(payload.adults);
+                        const children = safeNumber(payload.children);
+                        const travellerText = `${adults}A${children > 0 ? ` · ${children}C` : ""}`;
 
                         return (
                           <tr key={quote.id} className="align-top">
@@ -287,7 +297,7 @@ export default async function AgentQuotesPage({ searchParams }: AgentQuotesPageP
                                 </p>
                                 <p className="mt-1 text-xs font-medium text-slate-500">{quote.quote_ref || "—"}</p>
                                 <p className="mt-2 text-sm text-slate-600">
-                                  {[quote.destination, quote.departure_city].filter(Boolean).join(" · ") || "—"}
+                                  {[quote.destination, departureCity].filter(Boolean).join(" · ") || "—"}
                                 </p>
                               </div>
                             </td>
@@ -302,9 +312,9 @@ export default async function AgentQuotesPage({ searchParams }: AgentQuotesPageP
 
                             <td className="px-4 py-4">
                               <div>
-                                <p className="text-sm font-medium text-slate-900">{quote.travel_dates || "—"}</p>
+                                <p className="text-sm font-medium text-slate-900">{travelDates}</p>
                                 <p className="mt-1 text-xs text-slate-500">
-                                  {[quote.nights, travellerText].filter(Boolean).join(" · ")}
+                                  {[nights, travellerText].filter(Boolean).join(" · ")}
                                 </p>
                               </div>
                             </td>
@@ -322,7 +332,7 @@ export default async function AgentQuotesPage({ searchParams }: AgentQuotesPageP
 
                             <td className="px-4 py-4 text-right">
                               <p className="text-sm font-semibold text-slate-950">
-                                {formatCurrency(quote.total_amount)}
+                                {formatCurrency(quote.amount)}
                               </p>
                             </td>
 
@@ -399,7 +409,9 @@ export default async function AgentQuotesPage({ searchParams }: AgentQuotesPageP
                 >
                   <div>
                     <p className="text-sm font-semibold text-slate-950">Create New Quote</p>
-                    <p className="mt-1 text-sm text-slate-600">Start a fresh custom trip and convert it into a quote.</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Start a fresh custom trip and convert it into a quote.
+                    </p>
                   </div>
                   <Plus className="h-4 w-4 text-slate-500" />
                 </Link>
