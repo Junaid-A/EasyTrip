@@ -421,31 +421,41 @@ export default async function AgentQuoteDetailPage({
           </Link>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={[
-                "inline-flex rounded-full border px-3 py-1 text-xs font-semibold",
-                getStatusClasses(quote.status),
-              ].join(" ")}
-            >
-              {normalizeStatus(quote.status)}
-            </span>
+  <span
+    className={[
+      "inline-flex rounded-full border px-3 py-1 text-xs font-semibold",
+      getStatusClasses(quote.status),
+    ].join(" ")}
+  >
+    {normalizeStatus(quote.status)}
+  </span>
 
-            <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-              {quote.payment_status || "unpaid"}
-            </span>
+  <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+    {quote.payment_status || "unpaid"}
+  </span>
 
-            {quote.pdf_url ? (
-              <a
-                href={quote.pdf_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-              >
-                <FileText className="h-4 w-4" />
-                Open PDF
-              </a>
-            ) : null}
-          </div>
+  <a
+    href={`/api/agent/quotes/${quote.id}/pdf`}
+    target="_blank"
+    rel="noreferrer"
+    className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-100"
+  >
+    <FileText className="h-4 w-4" />
+    Generate PDF
+  </a>
+
+  {quote.pdf_url ? (
+    <a
+      href={quote.pdf_url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+    >
+      <FileText className="h-4 w-4" />
+      Open PDF
+    </a>
+  ) : null}
+</div>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
@@ -732,7 +742,7 @@ export default async function AgentQuoteDetailPage({
                               <h3 className="mt-3 text-lg font-semibold text-slate-950">
                                 {day.title || `Day ${index + 1}`}
                               </h3>
-                              {(day.city || day.location) ? (
+                              {day.city || day.location ? (
                                 <p className="mt-1 text-sm text-slate-600">
                                   {day.city || day.location}
                                 </p>
@@ -753,7 +763,7 @@ export default async function AgentQuoteDetailPage({
                             </div>
                           </div>
 
-                          {(day.notes || day.summary || day.description) ? (
+                          {day.notes || day.summary || day.description ? (
                             <p className="mt-4 text-sm leading-6 text-slate-600">
                               {day.notes || day.summary || day.description}
                             </p>

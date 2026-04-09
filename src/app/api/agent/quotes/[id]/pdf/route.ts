@@ -1,46 +1,127 @@
-/* src/app/api/agent/quotes/[id]/pdf/route.ts */
-
 import { chromium } from "playwright";
 import { createClient } from "@/lib/supabase/server";
-import {
-  generateQuoteHtml,
-  type QuotePdfData,
-  type QuotePdfDay,
-  type QuotePdfCategorySelection,
-  type QuotePdfPriceLine,
-} from "@/lib/pdf/quote-template";
+import { generateQuoteHtml, type QuotePdfData } from "@/lib/pdf/quote-template";
 
 export const dynamic = "force-dynamic";
 
-type LooseRecord = Record<string, any>;
+const PDF_BUCKET =
+  process.env.NEXT_PUBLIC_SUPABASE_QUOTE_PDF_BUCKET || "quote-pdfs";
 
-function pick<T = any>(obj: any, paths: string[], fallback?: T): T {
-  for (const path of paths) {
-    const parts = path.split(".");
-    let current = obj;
+type RouteContext = {
+  params: Promise<{
+    id: string;
+  }>;
+};
 
-    let found = true;
-    for (const part of parts) {
-      if (current == null || typeof current !== "object" || !(part in current)) {
-        found = false;
-        break;
-      }
-      current = current[part];
-    }
+type BuilderDayItem = {
+  id?: string | number;
+  type?: string;
+  title?: string;
+  name?: string;
+  label?: string;
+  time?: string;
+  notes?: string;
+  description?: string;
+  location?: string;
+  city?: string;
+};
 
-    if (found && current !== undefined && current !== null && current !== "") {
-      return current as T;
-    }
-  }
+type BuilderTripDay = {
+  id?: string | number;
+  day?: number;
+  dayNumber?: number;
+  title?: string;
+  city?: string;
+  location?: string;
+  notes?: string;
+  summary?: string;
+  description?: string;
+  hotelName?: string;
+  transferName?: string;
+  meals?: BuilderDayItem[];
+  sightseeing?: BuilderDayItem[];
+  activities?: BuilderDayItem[];
+  transfers?: BuilderDayItem[];
+  items?: BuilderDayItem[];
+};
 
-  return fallback as T;
+type BuilderPayload = {
+  destination?: string;
+  departureCity?: string;
+  travelDates?: string;
+  nights?: string;
+  adults?: number;
+  children?: number;
+  selectedFlightLabel?: string;
+  customTripDays?: BuilderTripDay[];
+  selectedPackagePrice?: number;
+  hotelTotal?: number;
+  transferTotal?: number;
+  sightseeingTotal?: number;
+  mealsTotal?: number;
+  extrasTotal?: number;
+  notes?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+};
+
+type PricingShape = {
+  total?: number;
+  grandTotal?: number;
+  finalTotal?: number;
+  hotelTotal?: number;
+  transferTotal?: number;
+  sightseeingTotal?: number;
+  mealsTotal?: number;
+  extrasTotal?: number;
+  serviceFee?: number;
+  markupTotal?: number;
+  [key: string]: unknown;
+};
+
+type QuoteRow = {
+  id: string;
+  agent_id: string | null;
+  quote_ref: string | null;
+  quote_name: string | null;
+  destination: string | null;
+  amount: number | null;
+  amount_received: number | null;
+  additional_expense_total: number | null;
+  balance_due: number | null;
+  payment_status: string | null;
+  status: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  customer_note: string | null;
+  internal_note: string | null;
+  valid_till: string | null;
+  pdf_url: string | null;
+  builder_payload: BuilderPayload | null;
+  pricing_snapshot: PricingShape | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type AgentRow = {
+  id: string;
+  contact_name: string | null;
+  contact_person: string | null;
+  company_name: string | null;
+  email: string | null;
+};
+
+function safeNumber(value: unknown) {
+  const num = Number(value ?? 0);
+  return Number.isFinite(num) ? num : 0;
 }
 
-function formatDate(input: string | null | undefined): string {
-  if (!input) return "—";
-
-  const date = new Date(input);
-  if (Number.isNaN(date.getTime())) return input;
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
 
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
@@ -49,544 +130,415 @@ function formatDate(input: string | null | undefined): string {
   }).format(date);
 }
 
-function formatDateRange(start?: string | null, end?: string | null): string {
-  if (!start && !end) return "Dates on request";
-  if (start && !end) return formatDate(start);
-  if (!start && end) return formatDate(end);
-  return `${formatDate(start)} - ${formatDate(end)}`;
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
 }
 
-function toTravellerSummary(payload: LooseRecord): string {
-  const adults = Number(
-    pick(payload, [
-      "travellers.adults",
-      "travelers.adults",
-      "summary.adults",
-      "adults",
-    ], 0),
-  );
+function normalizeDayItems(day: BuilderTripDay) {
+  const merged = [
+    ...asArray<BuilderDayItem>(day.sightseeing),
+    ...asArray<BuilderDayItem>(day.activities),
+    ...asArray<BuilderDayItem>(day.transfers),
+    ...asArray<BuilderDayItem>(day.meals),
+    ...asArray<BuilderDayItem>(day.items),
+  ];
 
-  const children = Number(
-    pick(payload, [
-      "travellers.children",
-      "travelers.children",
-      "summary.children",
-      "children",
-    ], 0),
-  );
-
-  const rooms = Number(
-    pick(payload, [
-      "travellers.rooms",
-      "travelers.rooms",
-      "summary.rooms",
-      "rooms",
-    ], 0),
-  );
-
-  const parts: string[] = [];
-  if (adults > 0) parts.push(`${adults} Adult${adults > 1 ? "s" : ""}`);
-  if (children > 0) parts.push(`${children} Child${children > 1 ? "ren" : ""}`);
-  if (rooms > 0) parts.push(`${rooms} Room${rooms > 1 ? "s" : ""}`);
-
-  return parts.length ? parts.join(" • ") : "Traveller details on request";
-}
-
-function normalizeSelections(payload: LooseRecord): QuotePdfCategorySelection[] {
-  const rawSelections =
-    pick<any[]>(payload, [
-      "selections",
-      "selectedCategories",
-      "quote.selections",
-      "summary.selections",
-    ], []) || [];
-
-  if (Array.isArray(rawSelections) && rawSelections.length > 0) {
-    return rawSelections.map((item, index) => ({
-      category: String(item.category || item.label || `Category ${index + 1}`),
-      selection: String(item.selection || item.value || item.title || "Selected"),
-      details: item.details ? String(item.details) : undefined,
-    }));
-  }
-
-  const fallback: QuotePdfCategorySelection[] = [];
-
-  const hotelTitle = pick<string>(payload, [
-    "selectedHotel.name",
-    "hotel.name",
-    "summary.hotel.name",
-    "pricing.hotel.label",
-  ]);
-  if (hotelTitle) {
-    fallback.push({
-      category: "Hotel",
-      selection: hotelTitle,
-      details: pick(payload, ["selectedHotel.category", "hotel.category", "summary.hotel.category"]),
-    });
-  }
-
-  const transferTitle = pick<string>(payload, [
-    "selectedTransfer.name",
-    "transfer.name",
-    "summary.transfer.name",
-  ]);
-  if (transferTitle) {
-    fallback.push({
-      category: "Transfers",
-      selection: transferTitle,
-      details: pick(payload, ["selectedTransfer.type", "transfer.type"]),
-    });
-  }
-
-  const sightseeingTitle = pick<string>(payload, [
-    "selectedSightseeing.name",
-    "sightseeing.name",
-    "summary.sightseeing.name",
-  ]);
-  if (sightseeingTitle) {
-    fallback.push({
-      category: "Sightseeing",
-      selection: sightseeingTitle,
-      details: pick(payload, ["selectedSightseeing.details", "sightseeing.details"]),
-    });
-  }
-
-  const mealPlan = pick<string>(payload, [
-    "selectedMeals.name",
-    "mealPlan.name",
-    "summary.meals.name",
-  ]);
-  if (mealPlan) {
-    fallback.push({
-      category: "Meals",
-      selection: mealPlan,
-    });
-  }
-
-  return fallback;
-}
-
-function normalizeItinerary(payload: LooseRecord): QuotePdfDay[] {
-  const rawDays =
-    pick<any[]>(payload, [
-      "itinerary",
-      "dayWise",
-      "dayPlan",
-      "trip.dayPlan",
-      "quote.itinerary",
-    ], []) || [];
-
-  if (!Array.isArray(rawDays) || rawDays.length === 0) {
-    return [
-      {
-        day: 1,
-        title: "Trip overview",
-        city: pick(payload, ["destination", "summary.destination", "customer.destination"], "Destination"),
-        description:
-          pick(payload, ["description", "summary.description", "trip.description"], "Detailed day-wise itinerary will be shared in the finalized version.") ||
-          "Detailed day-wise itinerary will be shared in the finalized version.",
-      },
-    ];
-  }
-
-  return rawDays.map((day, index) => ({
-    day: Number(day.day || day.dayNumber || index + 1),
-    title: String(day.title || day.heading || day.name || `Day ${index + 1}`),
-    city: day.city ? String(day.city) : undefined,
-    description: String(
-      day.description ||
-        day.summary ||
-        day.plan ||
-        day.details ||
-        "Day plan as selected.",
-    ),
-    hotel: day.hotel ? String(day.hotel) : undefined,
-    meals: Array.isArray(day.meals) ? day.meals.map(String) : undefined,
-    transfers: day.transfers ? String(day.transfers) : undefined,
-    activities: Array.isArray(day.activities) ? day.activities.map(String) : undefined,
+  return merged.map((item, index) => ({
+    id: `${item.type || "item"}-${index}`,
+    type: item.type || "Included",
+    title: item.title || item.name || item.label || "Planned item",
+    time: item.time || "",
+    notes: item.notes || item.description || "",
+    location: item.location || item.city || "",
   }));
 }
 
-function normalizePricing(payload: LooseRecord): {
-  lines: QuotePdfPriceLine[];
-  total: number;
-  currencySymbol: string;
-} {
-  const candidates: QuotePdfPriceLine[] = [
-    {
-      label: "Hotels",
-      amount: Number(
-        pick(payload, [
-          "pricing.estimatedHotelTotal",
-          "pricing.hotelTotal",
-          "pricing.hotels",
-          "quote.pricing.hotels",
-          "estimatedHotelTotal",
-        ], 0),
-      ),
-    },
-    {
-      label: "Flights",
-      amount: Number(
-        pick(payload, [
-          "pricing.estimatedFlightTotal",
-          "pricing.flightTotal",
-          "pricing.flights",
-          "quote.pricing.flights",
-          "estimatedFlightTotal",
-        ], 0),
-      ),
-    },
-    {
-      label: "Transfers",
-      amount: Number(
-        pick(payload, [
-          "pricing.estimatedTransferTotal",
-          "pricing.transferTotal",
-          "pricing.transfers",
-          "quote.pricing.transfers",
-          "estimatedTransferTotal",
-        ], 0),
-      ),
-    },
-    {
-      label: "Sightseeing",
-      amount: Number(
-        pick(payload, [
-          "pricing.estimatedSightseeingTotal",
-          "pricing.sightseeingTotal",
-          "pricing.sightseeing",
-          "quote.pricing.sightseeing",
-          "estimatedSightseeingTotal",
-        ], 0),
-      ),
-    },
-    {
-      label: "Meals",
-      amount: Number(
-        pick(payload, [
-          "pricing.estimatedMealsTotal",
-          "pricing.mealsTotal",
-          "pricing.meals",
-          "quote.pricing.meals",
-          "estimatedMealsTotal",
-        ], 0),
-      ),
-    },
-    {
-      label: "Extras",
-      amount: Number(
-        pick(payload, [
-          "pricing.extras",
-          "pricing.extraTotal",
-          "quote.pricing.extras",
-        ], 0),
-      ),
-    },
-    {
-      label: "Service Fee",
-      amount: Number(
-        pick(payload, [
-          "pricing.serviceFee",
-          "quote.pricing.serviceFee",
-          "serviceFee",
-        ], 0),
-      ),
-    },
-  ];
+function buildTravellerText(adults: number, children: number) {
+  if (adults <= 0 && children <= 0) return "Traveller details on request";
 
-  const lines = candidates.filter((item) => Number(item.amount) > 0);
+  return `${adults} Adult${adults === 1 ? "" : "s"}${
+    children > 0 ? ` · ${children} Child${children === 1 ? "" : "ren"}` : ""
+  }`;
+}
 
-  const explicitTotal = Number(
-    pick(payload, [
-      "pricing.total",
-      "pricing.grandTotal",
-      "quote.pricing.total",
-      "totalAmount",
-      "finalAmount",
-      "total",
-    ], 0),
+function guessHeroImage(destination: string) {
+  const value = destination.trim().toLowerCase();
+
+  if (value.includes("bangkok")) {
+    return "https://images.unsplash.com/photo-1508009603885-50cf7c579365?auto=format&fit=crop&w=1600&q=80";
+  }
+
+  if (value.includes("phuket")) {
+    return "https://images.unsplash.com/photo-1589394815804-964ed0be2eb5?auto=format&fit=crop&w=1600&q=80";
+  }
+
+  if (value.includes("krabi")) {
+    return "https://images.unsplash.com/photo-1573843981267-be1999ff37cd?auto=format&fit=crop&w=1600&q=80";
+  }
+
+  if (value.includes("pattaya")) {
+    return "https://images.unsplash.com/photo-1526481280695-3c4691f8d3ef?auto=format&fit=crop&w=1600&q=80";
+  }
+
+  return "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1600&q=80";
+}
+
+function sanitizeFilePart(value: string) {
+  return value.replace(/[^a-zA-Z0-9-_]/g, "_");
+}
+
+function mapQuoteToPdfData(quote: QuoteRow, agent: AgentRow): QuotePdfData {
+  const builderPayload = (quote.builder_payload || {}) as BuilderPayload;
+  const pricing = (quote.pricing_snapshot || {}) as PricingShape;
+  const itinerary = asArray<BuilderTripDay>(builderPayload.customTripDays);
+
+  const destination = quote.destination || builderPayload.destination || "Destination";
+  const adults = safeNumber(builderPayload.adults);
+  const children = safeNumber(builderPayload.children);
+
+  const hotelTotal = safeNumber(pricing.hotelTotal ?? builderPayload.hotelTotal);
+  const transferTotal = safeNumber(pricing.transferTotal ?? builderPayload.transferTotal);
+  const sightseeingTotal = safeNumber(
+    pricing.sightseeingTotal ?? builderPayload.sightseeingTotal,
+  );
+  const mealsTotal = safeNumber(pricing.mealsTotal ?? builderPayload.mealsTotal);
+  const extrasTotal = safeNumber(pricing.extrasTotal ?? builderPayload.extrasTotal);
+  const serviceFee = safeNumber(pricing.serviceFee);
+  const markupTotal = safeNumber(pricing.markupTotal);
+
+  const quoteBaseAmount = safeNumber(quote.amount);
+  const additionalExpenseTotal = safeNumber(quote.additional_expense_total);
+  const finalQuoteTotal = quoteBaseAmount + additionalExpenseTotal;
+
+  const grandTotal = safeNumber(
+    pricing.grandTotal ?? pricing.finalTotal ?? pricing.total ?? finalQuoteTotal,
   );
 
-  const total =
-    explicitTotal > 0
-      ? explicitTotal
-      : lines.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+  const pricingLines = [
+    { label: "Hotels", amount: hotelTotal },
+    { label: "Transfers", amount: transferTotal },
+    { label: "Sightseeing", amount: sightseeingTotal },
+    { label: "Meals", amount: mealsTotal },
+    { label: "Extras", amount: extrasTotal },
+    ...(serviceFee > 0 ? [{ label: "Service Fee", amount: serviceFee }] : []),
+    ...(markupTotal > 0 ? [{ label: "Markup", amount: markupTotal }] : []),
+    ...(additionalExpenseTotal > 0
+      ? [{ label: "Additional Expenses", amount: additionalExpenseTotal }]
+      : []),
+  ].filter((item) => item.amount > 0);
+
+  const selections = [
+    builderPayload.selectedFlightLabel
+      ? {
+          category: "Flights",
+          selection: builderPayload.selectedFlightLabel,
+          details: builderPayload.departureCity
+            ? `Origin: ${builderPayload.departureCity}`
+            : undefined,
+        }
+      : null,
+    hotelTotal > 0
+      ? {
+          category: "Hotels",
+          selection: "Selected hotel configuration",
+          details: `Commercial value ${new Intl.NumberFormat("en-IN", {
+            style: "currency",
+            currency: "INR",
+            maximumFractionDigits: 0,
+          }).format(hotelTotal)}`,
+        }
+      : null,
+    transferTotal > 0
+      ? {
+          category: "Transfers",
+          selection: "Selected transfer configuration",
+          details: `Commercial value ${new Intl.NumberFormat("en-IN", {
+            style: "currency",
+            currency: "INR",
+            maximumFractionDigits: 0,
+          }).format(transferTotal)}`,
+        }
+      : null,
+    sightseeingTotal > 0
+      ? {
+          category: "Sightseeing",
+          selection: "Selected sightseeing configuration",
+          details: `Commercial value ${new Intl.NumberFormat("en-IN", {
+            style: "currency",
+            currency: "INR",
+            maximumFractionDigits: 0,
+          }).format(sightseeingTotal)}`,
+        }
+      : null,
+    mealsTotal > 0
+      ? {
+          category: "Meals",
+          selection: "Selected meal configuration",
+          details: `Commercial value ${new Intl.NumberFormat("en-IN", {
+            style: "currency",
+            currency: "INR",
+            maximumFractionDigits: 0,
+          }).format(mealsTotal)}`,
+        }
+      : null,
+  ].filter(Boolean) as QuotePdfData["selections"];
+
+  const itineraryDays =
+    itinerary.length > 0
+      ? itinerary.map((day, index) => {
+          const lineItems = normalizeDayItems(day);
+          const mealNames = asArray<BuilderDayItem>(day.meals)
+            .map((item) => item.title || item.name || item.label)
+            .filter(Boolean) as string[];
+
+          return {
+            day: safeNumber(day.day ?? day.dayNumber ?? index + 1),
+            title: day.title || `Day ${index + 1}`,
+            city: day.city || day.location || undefined,
+            description:
+              day.notes ||
+              day.summary ||
+              day.description ||
+              "Day plan as selected for this trip.",
+            hotel: day.hotelName || undefined,
+            meals: mealNames.length ? mealNames : undefined,
+            transfers: day.transferName || undefined,
+            activities: lineItems.map((item) => {
+              const parts = [
+                item.title,
+                item.location ? `• ${item.location}` : "",
+                item.time ? `• ${item.time}` : "",
+                item.notes ? `• ${item.notes}` : "",
+              ].filter(Boolean);
+
+              return parts.join(" ");
+            }),
+          };
+        })
+      : [
+          {
+            day: 1,
+            title: quote.quote_name || destination,
+            city: destination,
+            description:
+              builderPayload.notes ||
+              quote.customer_note ||
+              "Detailed itinerary will be provided based on the final saved trip plan.",
+          },
+        ];
+
+  const customerName =
+    quote.customer_name || builderPayload.customerName || "Customer";
 
   return {
-    lines,
-    total,
-    currencySymbol: "₹",
-  };
-}
-
-function normalizeImages(payload: LooseRecord) {
-  const hero = pick<string>(payload, [
-    "media.heroImage",
-    "heroImage",
-    "images.hero",
-    "destinationImage",
-    "selectedPackage.image",
-    "summary.image",
-  ]);
-
-  const gallery = pick<any[]>(payload, [
-    "media.gallery",
-    "gallery",
-    "images.gallery",
-    "destinationGallery",
-  ], []);
-
-  return {
-    hero: hero ? { url: hero, alt: "Destination hero image" } : undefined,
-    gallery: Array.isArray(gallery)
-      ? gallery
-          .map((item) =>
-            typeof item === "string"
-              ? { url: item, alt: "Destination image" }
-              : { url: String(item.url || item.src || ""), alt: String(item.alt || "Destination image") },
-          )
-          .filter((img) => Boolean(img.url))
-      : [],
-  };
-}
-
-function normalizeList(value: any): string[] {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.map(String).filter(Boolean);
-  if (typeof value === "string") {
-    return value
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-  }
-  return [];
-}
-
-async function fetchQuoteOrThrow(supabase: Awaited<ReturnType<typeof createClient>>, quoteId: string) {
-  const quoteQuery = await supabase
-    .from("quotes")
-    .select("*")
-    .eq("id", quoteId)
-    .single();
-
-  if (quoteQuery.error || !quoteQuery.data) {
-    throw new Error("Quote not found.");
-  }
-
-  return quoteQuery.data as LooseRecord;
-}
-
-async function fetchAgentBranding(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-  quote: LooseRecord,
-) {
-  const directBranding = quote.agent_branding;
-  if (directBranding && typeof directBranding === "object") {
-    return directBranding as LooseRecord;
-  }
-
-  const agentId =
-    quote.agent_id ||
-    pick(quote, ["payload.agentId", "payload.agent.id"]) ||
-    userId;
-
-  const { data } = await supabase
-    .from("agents")
-    .select("*")
-    .eq("id", agentId)
-    .maybeSingle();
-
-  return (data || {}) as LooseRecord;
-}
-
-function mapToPdfData(quote: LooseRecord, branding: LooseRecord): QuotePdfData {
-  const payload = (quote.payload || quote.quote_payload || quote.data || {}) as LooseRecord;
-  const pricing = normalizePricing(payload);
-  const images = normalizeImages(payload);
-
-  const startDate = pick<string>(payload, [
-    "travelDates.start",
-    "travel_dates.start",
-    "departureDate",
-    "checkIn",
-    "summary.startDate",
-  ]);
-
-  const endDate = pick<string>(payload, [
-    "travelDates.end",
-    "travel_dates.end",
-    "returnDate",
-    "checkOut",
-    "summary.endDate",
-  ]);
-
-  return {
-    quoteRef: String(quote.quote_ref || quote.reference || quote.id),
-    generatedAt: formatDate(quote.created_at || new Date().toISOString()),
-    validUntil: quote.valid_until ? formatDate(quote.valid_until) : undefined,
+    quoteRef: quote.quote_ref || quote.id,
+    generatedAt: formatDate(new Date().toISOString()),
+    validUntil: formatDate(quote.valid_till),
 
     agent: {
-      companyName:
-        String(
-          branding.company_name ||
-            branding.name ||
-            pick(payload, ["agent.companyName", "agent.name"], "Travel Company"),
-        ),
-      logoUrl:
-        branding.brand_logo_url ||
-        branding.logo_url ||
-        pick(payload, ["agent.logoUrl", "agent.logo"]),
-      primaryColor:
-        branding.brand_primary_color ||
-        branding.primary_color ||
-        "#f97316",
-      secondaryColor:
-        branding.brand_secondary_color ||
-        branding.secondary_color ||
-        "#111827",
-      contactPerson:
-        branding.contact_person ||
-        pick(payload, ["agent.contactPerson", "agent.contact"]),
-      email:
-        branding.contact_email ||
-        branding.email ||
-        pick(payload, ["agent.email"]),
-      phone:
-        branding.contact_phone ||
-        branding.phone ||
-        pick(payload, ["agent.phone"]),
-      website:
-        branding.website ||
-        pick(payload, ["agent.website"]),
-      address:
-        branding.address ||
-        pick(payload, ["agent.address"]),
+      companyName: agent.company_name || "Travel Company",
+      contactPerson: agent.contact_person || agent.contact_name || undefined,
+      email: agent.email || undefined,
+      primaryColor: "#f97316",
+      secondaryColor: "#111827",
     },
 
     customer: {
-      name: String(
-        quote.customer_name ||
-          pick(payload, [
-            "customer.name",
-            "traveller.name",
-            "leadTraveller.name",
-            "contact.name",
-          ], "Customer"),
-      ),
-      destination: String(
-        quote.destination ||
-          pick(payload, [
-            "destination",
-            "summary.destination",
-            "selectedPackage.destination",
-          ], "Destination"),
-      ),
-      travelDates: formatDateRange(startDate, endDate),
-      travellers: toTravellerSummary(payload),
+      name: customerName,
+      destination,
+      travelDates: builderPayload.travelDates || "Travel dates on request",
+      travellers: buildTravellerText(adults, children),
     },
 
     trip: {
-      title: String(
-        quote.title ||
-          pick(payload, [
-            "selectedPackage.title",
-            "package.title",
-            "summary.title",
-            "trip.title",
-          ], "Travel Proposal"),
-      ),
-      subtitle: pick(payload, [
-        "summary.subtitle",
-        "trip.subtitle",
-        "description",
-      ]),
-      duration: String(
-        quote.duration ||
-          pick(payload, [
-            "nights",
-            "summary.duration",
-            "trip.duration",
-          ], "Custom duration"),
-      ),
-      hotelCategory: pick(payload, [
-        "hotelCategory",
-        "selectedHotel.category",
-        "summary.hotelCategory",
-      ]),
-      flightIncluded: Boolean(
-        pick(payload, [
-          "flightIncluded",
-          "withFlight",
-          "summary.flightIncluded",
-          "selectedPackage.includedFlights",
-        ], false),
-      ),
+      title: quote.quote_name || `${destination} Travel Proposal`,
+      subtitle:
+        builderPayload.notes ||
+        `A clean and customer-ready proposal for ${destination}.`,
+      duration: builderPayload.nights || "Custom duration",
+      hotelCategory: hotelTotal > 0 ? "As selected" : undefined,
+      flightIncluded: Boolean(builderPayload.selectedFlightLabel),
     },
 
-    images,
-    selections: normalizeSelections(payload),
-    itinerary: normalizeItinerary(payload),
+    images: {
+      hero: {
+        url: guessHeroImage(destination),
+        alt: destination,
+      },
+      gallery: [],
+    },
 
-    pricing,
+    selections,
+    itinerary: itineraryDays,
 
-    notes:
-      quote.notes ||
-      pick(payload, [
-        "notes",
-        "summary.notes",
-      ]),
-    inclusions: normalizeList(
-      pick(payload, ["inclusions", "summary.inclusions"]),
-    ),
-    exclusions: normalizeList(
-      pick(payload, ["exclusions", "summary.exclusions"]),
-    ),
-    terms: normalizeList(
-      branding.terms_and_conditions ||
-        quote.terms ||
-        pick(payload, ["terms", "summary.terms"]),
-    ),
+    pricing: {
+      lines: pricingLines,
+      total: grandTotal > 0 ? grandTotal : finalQuoteTotal,
+      currencySymbol: "₹",
+    },
+
+    notes: quote.customer_note || builderPayload.notes || undefined,
+
+    inclusions: [
+      hotelTotal > 0 ? "Hotel accommodation as selected" : null,
+      transferTotal > 0 ? "Transfers as selected" : null,
+      sightseeingTotal > 0 ? "Sightseeing as selected" : null,
+      mealsTotal > 0 ? "Meals as selected" : null,
+      builderPayload.selectedFlightLabel ? "Flight option as selected" : null,
+    ].filter(Boolean) as string[],
+
+    exclusions: [
+      "Any item not explicitly mentioned in this proposal",
+      "Personal expenses and incidental charges",
+      "Government taxes or surcharges if additionally applicable",
+    ],
+
+    terms: [
+      "Rates are subject to final availability at the time of confirmation.",
+      "Any revision in selections may change the final price.",
+      "Booking is confirmed only after payment and written confirmation.",
+    ],
   };
 }
 
-export async function GET(
-  _request: Request,
-  context: { params: Promise<{ id: string }> },
-) {
+async function uploadPdfAndGetUrl(args: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  agentId: string;
+  quoteId: string;
+  quoteRef: string;
+  pdfBuffer: Buffer;
+}) {
+  const { supabase, agentId, quoteId, quoteRef, pdfBuffer } = args;
+
+  const safeQuoteRef = sanitizeFilePart(quoteRef || quoteId);
+  const filePath = `agents/${sanitizeFilePart(agentId)}/quotes/${sanitizeFilePart(
+    quoteId,
+  )}/Quote-${safeQuoteRef}.pdf`;
+
+  const uploadResult = await supabase.storage
+    .from(PDF_BUCKET)
+    .upload(filePath, pdfBuffer, {
+      contentType: "application/pdf",
+      upsert: true,
+      cacheControl: "3600",
+    });
+
+  if (uploadResult.error) {
+    throw new Error(
+      `Storage upload failed. Check that bucket "${PDF_BUCKET}" exists and is writable. ${uploadResult.error.message}`,
+    );
+  }
+
+  const { data: publicUrlData } = supabase.storage
+    .from(PDF_BUCKET)
+    .getPublicUrl(filePath);
+
+  if (!publicUrlData?.publicUrl) {
+    throw new Error("Failed to generate public URL for uploaded PDF.");
+  }
+
+  return {
+    filePath,
+    publicUrl: publicUrlData.publicUrl,
+  };
+}
+
+async function logPdfGeneration(args: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  quoteId: string;
+  agentId: string;
+  actorName?: string | null;
+  actorEmail?: string | null;
+  pdfUrl: string;
+  storagePath: string;
+}) {
+  const { supabase, quoteId, agentId, actorName, actorEmail, pdfUrl, storagePath } = args;
+
+  await supabase.from("quote_activity_logs").insert({
+    quote_id: quoteId,
+    agent_id: agentId,
+    action: "pdf_generated",
+    activity_type: "status",
+    activity_label: "Quote PDF generated",
+    actor_name: actorName || null,
+    actor_email: actorEmail || null,
+    meta: {
+      pdfUrl,
+      storagePath,
+    },
+  });
+}
+
+export async function GET(_request: Request, context: RouteContext) {
   let browser: Awaited<ReturnType<typeof chromium.launch>> | null = null;
 
   try {
     const { id } = await context.params;
     const supabase = await createClient();
 
-    const auth = await supabase.auth.getUser();
-    const user = auth.data.user;
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-    if (!user) {
+    if (userError || !user) {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const role = user.app_metadata?.role;
-    if (role !== "agent" && role !== "admin") {
+    if (user.app_metadata?.role !== "agent") {
       return new Response("Forbidden", { status: 403 });
     }
 
-    const quote = await fetchQuoteOrThrow(supabase, id);
+    const { data: agent, error: agentError } = await supabase
+      .from("agents")
+      .select("id, contact_name, contact_person, company_name, email")
+      .eq("auth_user_id", user.id)
+      .single();
 
-    if (role === "agent") {
-      const quoteOwner =
-        quote.agent_id ||
-        pick(quote, ["payload.agentId", "payload.agent.id"]);
-
-      if (quoteOwner && quoteOwner !== user.id) {
-        return new Response("Forbidden", { status: 403 });
-      }
+    if (agentError || !agent?.id) {
+      return new Response("Forbidden", { status: 403 });
     }
 
-    const branding = await fetchAgentBranding(supabase, user.id, quote);
-    const pdfData = mapToPdfData(quote, branding);
+    const { data: quote, error: quoteError } = await supabase
+      .from("quotes")
+      .select(
+        `
+          id,
+          agent_id,
+          quote_ref,
+          quote_name,
+          destination,
+          amount,
+          amount_received,
+          additional_expense_total,
+          balance_due,
+          payment_status,
+          status,
+          customer_name,
+          customer_email,
+          customer_phone,
+          customer_note,
+          internal_note,
+          valid_till,
+          pdf_url,
+          builder_payload,
+          pricing_snapshot,
+          created_at,
+          updated_at
+        `,
+      )
+      .eq("id", id)
+      .maybeSingle();
+
+    if (quoteError || !quote) {
+      return new Response("Quote not found", { status: 404 });
+    }
+
+    if (quote.agent_id !== agent.id) {
+      return new Response("Forbidden", { status: 403 });
+    }
+
+    const pdfData = mapQuoteToPdfData(quote as QuoteRow, agent as AgentRow);
     const html = generateQuoteHtml(pdfData);
 
     browser = await chromium.launch({
@@ -603,33 +555,67 @@ export async function GET(
       waitUntil: "networkidle",
     });
 
-    const pdfBuffer = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      margin: {
-        top: "12px",
-        right: "12px",
-        bottom: "12px",
-        left: "12px",
-      },
+    const pdfBuffer = Buffer.from(
+      await page.pdf({
+        format: "A4",
+        printBackground: true,
+        margin: {
+          top: "12px",
+          right: "12px",
+          bottom: "12px",
+          left: "12px",
+        },
+      }),
+    );
+
+    const upload = await uploadPdfAndGetUrl({
+      supabase,
+      agentId: agent.id,
+      quoteId: quote.id,
+      quoteRef: pdfData.quoteRef,
+      pdfBuffer,
     });
 
-    const safeRef = String(pdfData.quoteRef).replace(/[^a-zA-Z0-9-_]/g, "_");
+    const { error: updateError } = await supabase
+      .from("quotes")
+      .update({
+        pdf_url: upload.publicUrl,
+        status: "pdf_generated",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", quote.id)
+      .eq("agent_id", agent.id);
+
+    if (updateError) {
+      throw new Error(`Quote update failed. ${updateError.message}`);
+    }
+
+    await logPdfGeneration({
+      supabase,
+      quoteId: quote.id,
+      agentId: agent.id,
+      actorName: agent.contact_person || agent.contact_name || null,
+      actorEmail: agent.email || user.email || null,
+      pdfUrl: upload.publicUrl,
+      storagePath: upload.filePath,
+    });
+
+    const safeQuoteRef = sanitizeFilePart(pdfData.quoteRef || quote.id);
 
     return new Response(pdfBuffer, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="Quote-${safeRef}.pdf"`,
+        "Content-Disposition": `inline; filename="Quote-${safeQuoteRef}.pdf"`,
         "Cache-Control": "no-store, max-age=0",
       },
     });
   } catch (error) {
-    console.error("[QUOTE_PDF_GET]", error);
+    console.error("[AGENT_QUOTE_PDF_GET]", error);
 
     return Response.json(
       {
-        error: "Failed to generate PDF.",
+        error: "Failed to generate quote PDF.",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
