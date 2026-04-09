@@ -73,6 +73,7 @@ type CreateQuotePayload = {
   customerEmail?: string;
   customerPhone?: string;
   validTill?: string;
+  status?: "draft" | "pending";
 };
 
 function normalizeEmail(email?: string | null) {
@@ -118,7 +119,15 @@ function resolveGrandTotal(payload: CreateQuotePayload) {
     return explicitTotal;
   }
 
-  return hotelTotal + transferTotal + sightseeingTotal + mealsTotal + extrasTotal + serviceFee + markupTotal;
+  return (
+    hotelTotal +
+    transferTotal +
+    sightseeingTotal +
+    mealsTotal +
+    extrasTotal +
+    serviceFee +
+    markupTotal
+  );
 }
 
 function buildPricingSnapshot(payload: CreateQuotePayload) {
@@ -203,46 +212,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Grand total must be greater than 0." }, { status: 400 });
     }
 
+    const requestedStatus = body.status === "draft" ? "draft" : "pending";
     const quoteRef = generateQuoteRef();
 
     const quoteInsert = {
-  quote_ref: quoteRef,
-  agent_id: agent.id,
-  quote_name: body.destination?.trim() || "Custom Trip Quote",
-  customer_name: body.customerName?.trim() || null,
-  customer_email: normalizeEmail(body.customerEmail) || null,
-  customer_phone: body.customerPhone?.trim() || null,
-  destination: body.destination?.trim() || null,
-  amount: grandTotal,
-  base_total: grandTotal,
-  sell_total: grandTotal,
-  markup_total: safeNumber(pricingSnapshot.markupTotal),
-  status: "pending",
-  valid_till: body.validTill?.trim() || null,
-  customer_note: body.notes?.trim() || null,
-  pricing_snapshot: pricingSnapshot,
-  builder_payload: {
-    destination: body.destination || "",
-    departureCity: body.departureCity || "",
-    travelDates: body.travelDates || "",
-    nights: body.nights || "",
-    adults: safeNumber(body.adults),
-    children: safeNumber(body.children),
-    selectedFlightLabel: body.selectedFlightLabel || "",
-    customTripDays,
-    selectedPackagePrice: safeNumber(body.selectedPackagePrice),
-    hotelTotal: safeNumber(body.hotelTotal),
-    transferTotal: safeNumber(body.transferTotal),
-    sightseeingTotal: safeNumber(body.sightseeingTotal),
-    mealsTotal: safeNumber(body.mealsTotal),
-    extrasTotal: safeNumber(body.extrasTotal),
-    notes: body.notes || "",
-    customerName: body.customerName || "",
-    customerEmail: body.customerEmail || "",
-    customerPhone: body.customerPhone || "",
-  },
-  markup_config: {},
-};
+      quote_ref: quoteRef,
+      agent_id: agent.id,
+      quote_name: body.destination?.trim() || "Custom Trip Quote",
+      customer_name: body.customerName?.trim() || null,
+      customer_email: normalizeEmail(body.customerEmail) || null,
+      customer_phone: body.customerPhone?.trim() || null,
+      destination: body.destination?.trim() || null,
+      amount: grandTotal,
+      base_total: grandTotal,
+      sell_total: grandTotal,
+      markup_total: safeNumber(pricingSnapshot.markupTotal),
+      status: requestedStatus,
+      valid_till: body.validTill?.trim() || null,
+      customer_note: body.notes?.trim() || null,
+      pricing_snapshot: pricingSnapshot,
+      builder_payload: {
+        destination: body.destination || "",
+        departureCity: body.departureCity || "",
+        travelDates: body.travelDates || "",
+        nights: body.nights || "",
+        adults: safeNumber(body.adults),
+        children: safeNumber(body.children),
+        selectedFlightLabel: body.selectedFlightLabel || "",
+        customTripDays,
+        selectedPackagePrice: safeNumber(body.selectedPackagePrice),
+        hotelTotal: safeNumber(body.hotelTotal),
+        transferTotal: safeNumber(body.transferTotal),
+        sightseeingTotal: safeNumber(body.sightseeingTotal),
+        mealsTotal: safeNumber(body.mealsTotal),
+        extrasTotal: safeNumber(body.extrasTotal),
+        notes: body.notes || "",
+        customerName: body.customerName || "",
+        customerEmail: body.customerEmail || "",
+        customerPhone: body.customerPhone || "",
+      },
+      markup_config: {},
+    };
 
     const { data: insertedQuote, error: insertError } = await supabase
       .from("quotes")
@@ -261,19 +271,24 @@ export async function POST(request: NextRequest) {
     }
 
     const actorName =
-      agent.contact_name || agent.contact_person || agent.company_name || agent.email || user.email || "Agent";
+      agent.contact_name ||
+      agent.contact_person ||
+      agent.company_name ||
+      agent.email ||
+      user.email ||
+      "Agent";
 
     const logPayload = {
       quote_id: insertedQuote.id,
       agent_id: agent.id,
       actor_name: actorName,
       actor_email: user.email || null,
-      action: "quote_created",
-      activity_type: "created",
-      activity_label: "Quote created",
+      action: requestedStatus === "draft" ? "quote_saved_as_draft" : "quote_created",
+      activity_type: requestedStatus === "draft" ? "draft" : "created",
+      activity_label: requestedStatus === "draft" ? "Quote saved as draft" : "Quote created",
       meta: {
         quote_ref: quoteRef,
-        status: "draft",
+        status: requestedStatus,
         total_amount: grandTotal,
         destination: quoteInsert.destination,
       },

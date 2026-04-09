@@ -15,6 +15,7 @@ import {
 import { PortalShell } from "@/components/shared/portal-shell";
 import { AgentSidebar } from "@/components/agent/agent-sidebar";
 import { InfoPanel } from "@/components/shared/info-panel";
+import { QuoteDetailActions } from "@/components/agent/quote-detail-actions";
 import { createClient } from "@/lib/supabase/server";
 
 type AgentQuoteDetailPageProps = {
@@ -178,6 +179,7 @@ function normalizeStatus(status: string | null | undefined) {
   if (value === "sent") return "Sent";
   if (value === "paid") return "Paid";
   if (value === "pending") return "Pending";
+  if (value === "draft") return "Draft";
 
   return "Draft";
 }
@@ -186,7 +188,7 @@ function getStatusClasses(status: string | null | undefined) {
   const value = (status || "draft").trim().toLowerCase();
 
   if (value === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (value === "saved") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (value === "saved" || value === "draft") return "border-amber-200 bg-amber-50 text-amber-700";
   if (value === "pdf_generated") return "border-orange-200 bg-orange-50 text-orange-700";
   if (value === "shared") return "border-indigo-200 bg-indigo-50 text-indigo-700";
   if (value === "converted") return "border-teal-200 bg-teal-50 text-teal-700";
@@ -671,7 +673,11 @@ export default async function AgentQuoteDetailPage({
             </InfoPanel>
           </div>
 
-          <div className="xl:sticky xl:top-6 xl:self-start">
+          <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
+            <InfoPanel title="Quote Actions">
+              <QuoteDetailActions quoteId={quote.id} currentStatus={quote.status} />
+            </InfoPanel>
+
             <InfoPanel title="Pricing Snapshot">
               <div className="space-y-4">
                 <div className="rounded-[26px] border border-orange-200 bg-[linear-gradient(180deg,#fff7ed_0%,#ffffff_100%)] p-5">
