@@ -226,6 +226,8 @@ export function TripBuilderShell({
   continueHref,
   chrome = "public",
 }: TripBuilderShellProps) {
+  const isAgentQuoteFlow = flowMode === "agent_quote" && chrome === "agent";
+
   const resolvedContinueHref =
     continueHref ?? (flowMode === "agent_quote" ? "/agent/quotes/review" : "/review");
 
@@ -252,7 +254,7 @@ export function TripBuilderShell({
     (state) => state.selectedPackageTitle
   );
 
-  const [mode, setMode] = useState<BuilderMode>("standard");
+  const [mode, setMode] = useState<BuilderMode>(isAgentQuoteFlow ? "custom" : "standard");
   const [activeCategory, setActiveCategory] = useState<PackageCategory>("all");
   const [hotelFilter, setHotelFilter] = useState<HotelFilter>("all");
   const [durationFilter, setDurationFilter] = useState<DurationFilter>("all");
@@ -283,10 +285,14 @@ export function TripBuilderShell({
     departureCities.find((item) => item.id === departureCityId) ?? departureCities[0];
 
   useEffect(() => {
-    if (mode === "custom") {
-      initializeCustomTripDays(dayPlans);
-    }
-  }, [mode, dayPlans, initializeCustomTripDays]);
+  if (isAgentQuoteFlow && mode !== "custom") {
+    setMode("custom");
+  }
+
+  if (mode === "custom") {
+    initializeCustomTripDays(dayPlans);
+  }
+}, [isAgentQuoteFlow, mode, dayPlans, initializeCustomTripDays]);
 
   const filteredVariants = useMemo(() => {
     return standardPackages.filter((pkg) => {
@@ -641,31 +647,33 @@ export function TripBuilderShell({
             </div>
           </div>
 
-          <div className="-mx-1 mt-4 flex gap-3 overflow-x-auto px-1 pb-1 sm:justify-center sm:overflow-visible">
-            <ModeCircle
-              active={mode === "standard"}
-              title="Standard"
-              subtitle="Ready"
-              onClick={() => setMode("standard")}
-              icon={<MapPin className="h-5 w-5" />}
-            />
-            <ModeCircle
-              active={mode === "ai"}
-              title="AI Assist"
-              subtitle="Guided"
-              onClick={() => setMode("ai")}
-              icon={<Sparkles className="h-5 w-5" />}
-            />
-            <ModeCircle
-              active={mode === "custom"}
-              title="Custom"
-              subtitle="Control"
-              onClick={() => setMode("custom")}
-              icon={<ChevronRight className="h-5 w-5" />}
-            />
-          </div>
+          {!isAgentQuoteFlow ? (
+  <div className="-mx-1 mt-4 flex gap-3 overflow-x-auto px-1 pb-1 sm:justify-center sm:overflow-visible">
+    <ModeCircle
+      active={mode === "standard"}
+      title="Standard"
+      subtitle="Ready"
+      onClick={() => setMode("standard")}
+      icon={<MapPin className="h-5 w-5" />}
+    />
+    <ModeCircle
+      active={mode === "ai"}
+      title="AI Assist"
+      subtitle="Guided"
+      onClick={() => setMode("ai")}
+      icon={<Sparkles className="h-5 w-5" />}
+    />
+    <ModeCircle
+      active={mode === "custom"}
+      title="Custom"
+      subtitle="Control"
+      onClick={() => setMode("custom")}
+      icon={<ChevronRight className="h-5 w-5" />}
+    />
+  </div>
+) : null}
 
-          {mode === "standard" && (
+          {!isAgentQuoteFlow && mode === "standard" && (
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
               <div className="min-w-0 space-y-6">
                 <section className="min-w-0">
@@ -954,7 +962,7 @@ export function TripBuilderShell({
             </div>
           )}
 
-          {mode === "standard" && selectedPackage ? (
+          {!isAgentQuoteFlow && mode === "standard" && selectedPackage ? (
             <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur xl:hidden">
               <div className="mx-auto max-w-md">
                 <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
@@ -997,7 +1005,7 @@ export function TripBuilderShell({
             </div>
           ) : null}
 
-          {mode === "ai" && (
+          {!isAgentQuoteFlow && mode === "ai" && (
             <section className="mt-6">
               <AIGuidedFlow
                 departureCityLabel={`${selectedDepartureCity.city} · ${selectedDepartureCity.airportCode}`}
@@ -1015,13 +1023,13 @@ export function TripBuilderShell({
             <section className="mt-6 space-y-4">
               <div className="rounded-[28px] border border-orange-200 bg-orange-50 p-5">
                 <p className="text-sm font-semibold text-orange-700">
-                  Custom Trip Studio enabled
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Full control is now day-wise. Customers can edit hotel quality, choose
-                  daily transfers, filter sightseeing by timing, select meals, add extras,
-                  and review live pricing.
-                </p>
+  {isAgentQuoteFlow ? "Agent Custom Quote Builder enabled" : "Custom Trip Studio enabled"}
+</p>
+<p className="mt-1 text-sm text-slate-600">
+  {isAgentQuoteFlow
+    ? "This agent flow is locked to the custom builder only."
+    : "Full control is now day-wise. Customers can edit hotel quality, choose daily transfers, filter sightseeing by timing, select meals, add extras, and review live pricing."}
+</p>
 
                 {customSeedPackageId || selectedPackageTitleFromStore ? (
                   <p className="mt-2 text-sm text-slate-700">

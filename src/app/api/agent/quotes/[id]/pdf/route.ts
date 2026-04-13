@@ -617,7 +617,7 @@ export async function GET(_request: Request, context: RouteContext) {
       {
         error: "Failed to generate quote PDF.",
         details: error instanceof Error ? error.message : "Unknown error",
-      },
+      },    
       { status: 500 },
     );
   } finally {
