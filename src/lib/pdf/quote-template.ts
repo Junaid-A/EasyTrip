@@ -347,7 +347,7 @@ export function generateQuoteHtml(data: QuotePdfData): string {
 
   return `
 <!doctype html>
-<html lang="en">
+<html lang="en" data-scroll-behavior="smooth">
 <head>
   <meta charset="utf-8" />
   <title>${escapeHtml(data.quoteRef)} - Travel Proposal</title>
