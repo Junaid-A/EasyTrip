@@ -901,7 +901,7 @@ export default function AdminDashboardPage() {
 
             <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
               <div className="h-[300px] rounded-[22px] border border-[var(--line)] bg-white p-3">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={bookingChart}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e7e1d8" />
                     <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} />
@@ -913,7 +913,7 @@ export default function AdminDashboardPage() {
               </div>
 
               <div className="h-[300px] rounded-[22px] border border-[var(--line)] bg-white p-3">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
                     <Pie
                       data={bookingPie}
@@ -982,7 +982,7 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="h-[320px] rounded-[22px] border border-[var(--line)] bg-white p-3">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={revenueChart}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e7e1d8" />
                   <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} />
@@ -1052,7 +1052,7 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="h-[300px] rounded-[22px] border border-[var(--line)] bg-white p-3">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={quoteChart}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e7e1d8" />
                   <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#6b7280" }} />
@@ -1100,7 +1100,7 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="h-[300px] rounded-[22px] border border-[var(--line)] bg-white p-3">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={agentChart}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e7e1d8" />
                   <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#6b7280" }} />

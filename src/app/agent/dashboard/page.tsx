@@ -718,7 +718,7 @@ export default function AgentDashboardPage() {
                 <p className="mb-4 text-sm font-semibold text-[var(--hero-ink)]">
                   Approved vs cancelled trips
                 </p>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={tripChart}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} />
@@ -734,7 +734,7 @@ export default function AgentDashboardPage() {
                 <p className="mb-4 text-sm font-semibold text-[var(--hero-ink)]">
                   Projected vs collected revenue
                 </p>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={revenueChart}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} />
@@ -751,7 +751,7 @@ export default function AgentDashboardPage() {
           <SectionCard title="Booking Mix">
             <div className="grid gap-4 md:grid-cols-3 2xl:grid-cols-1">
               <div className="h-[320px] rounded-[24px] border border-[var(--line)] bg-white p-4">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
                     <Pie
                       data={tripStatusData}
