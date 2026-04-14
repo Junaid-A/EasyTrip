@@ -4,16 +4,16 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export type BookingStatus = "pending" | "confirmed" | "cancelled";
-export type PaymentStatus = "paid" | "partial" | "refund" | "unpaid";
+export type PaymentStatus = "unpaid" | "partial" | "paid" | "refunded";
 
-export type BookingCrmTraveller = {
+export type BookingTraveller = {
   id: string;
   name: string;
   age: string;
-  type: string;
+  gender: string;
 };
 
-export type BookingCrmPayment = {
+export type BookingPayment = {
   id: string;
   amount: number;
   mode: string;
@@ -21,34 +21,42 @@ export type BookingCrmPayment = {
   note?: string | null;
 };
 
-export type BookingCrmNote = {
+export type BookingNote = {
   id: string;
   text: string;
   createdAt: string;
 };
 
-export type BookingCrmTripDay = {
+export type BookingItineraryItem = {
   id: string;
-  dayLabel: string;
+  day: number;
   title: string;
   city: string;
   description: string;
 };
 
-export type BookingCrmPastBooking = {
+export type PastBookingItem = {
+  id: string;
   bookingRef: string;
   destination: string;
-  amount: number;
-  createdAt: string;
   status: BookingStatus;
+  totalAmount: number;
+  createdAt: string;
 };
 
-export type BookingCrmLog = {
+export type BookingActivityLog = {
   id: string;
-  title: string;
-  description: string;
   createdAt: string;
-  tone?: "default" | "success" | "warning";
+  actorName: string;
+  actorId: string;
+  action: string;
+  entityType: string;
+  summary: string;
+  changes: Array<{
+    field: string;
+    before: string | null;
+    after: string | null;
+  }>;
 };
 
 export type BookingCrmPricing = {
@@ -66,36 +74,52 @@ export type BookingCrmPricing = {
 export type BookingCrmInitialData = {
   bookingId: string;
   bookingRef: string;
+  createdAt: string;
+  updatedAt: string;
+
+  tripTitle: string;
   customerName: string;
   customerEmail: string;
   customerPhone: string;
-  destination: string;
+  alternatePhone: string;
+  whatsappNumber: string;
 
-  tripTitle: string;
+  destination: string;
   departure: string;
   startDate: string;
   endDate: string;
   duration: string;
   rooms: string;
   travellersCount: string;
+
   bookingStatus: BookingStatus;
   paymentStatus: PaymentStatus;
 
-  pricing: BookingCrmPricing;
-  travellers: BookingCrmTraveller[];
-  payments: BookingCrmPayment[];
-  notes: BookingCrmNote[];
-  tripPlan: BookingCrmTripDay[];
-  logs: BookingCrmLog[];
-  pastBookings: BookingCrmPastBooking[];
+  totalAmount: number;
+  amountPaid: number;
 
-  createdAt: string;
-  updatedAt: string;
+  tags: string[];
+  notes: BookingNote[];
+  payments: BookingPayment[];
+  travellers: BookingTraveller[];
+  itinerary: BookingItineraryItem[];
+
+  pricing: BookingCrmPricing;
+  activityLogs: BookingActivityLog[];
+  pastBookings: PastBookingItem[];
 };
 
 export type BookingCrmSaveInput = {
   bookingId: string;
+  bookingRef: string;
+
   tripTitle: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  alternatePhone: string;
+  whatsappNumber: string;
+
   destination: string;
   departure: string;
   startDate: string;
@@ -103,16 +127,80 @@ export type BookingCrmSaveInput = {
   duration: string;
   rooms: string;
   travellersCount: string;
+
   bookingStatus: BookingStatus;
   paymentStatus: PaymentStatus;
+
+  tags: string[];
+  notes: BookingNote[];
+  payments: BookingPayment[];
+  travellers: BookingTraveller[];
+  itinerary: BookingItineraryItem[];
+
   pricing: BookingCrmPricing;
-  travellers: BookingCrmTraveller[];
-  tripPlan: BookingCrmTripDay[];
+
+  changes: Array<{
+    field: string;
+    before: string | null;
+    after: string | null;
+  }>;
+  pendingLogs: Array<{
+    action: string;
+    entityType: string;
+    summary: string;
+    changes: Array<{
+      field: string;
+      before: string | null;
+      after: string | null;
+    }>;
+  }>;
+};
+
+type LogActionInput = {
+  bookingId: string;
+  bookingRef: string;
+  action: string;
+  entityType: string;
+  summary: string;
+  changes?: Array<{
+    field: string;
+    before: string | null;
+    after: string | null;
+  }>;
 };
 
 type Props = {
   initialData: BookingCrmInitialData;
-  onSave?: (input: BookingCrmSaveInput) => Promise<void> | void;
+  onSave?: (
+    input: BookingCrmSaveInput,
+  ) =>
+    | Promise<{
+        ok?: boolean;
+        message?: string;
+        logs?: BookingActivityLog[];
+        data?: BookingCrmInitialData;
+      } | void>
+    | {
+        ok?: boolean;
+        message?: string;
+        logs?: BookingActivityLog[];
+        data?: BookingCrmInitialData;
+      }
+    | void;
+  onLog?: (
+    input: LogActionInput,
+  ) =>
+    | Promise<{
+        ok?: boolean;
+        message?: string;
+        log?: BookingActivityLog;
+      } | void>
+    | {
+        ok?: boolean;
+        message?: string;
+        log?: BookingActivityLog;
+      }
+    | void;
 };
 
 function cn(...parts: Array<string | false | null | undefined>) {
@@ -158,7 +246,7 @@ function statusPillClasses(status: BookingStatus | PaymentStatus | string) {
     case "partial":
       return "border-amber-200 bg-amber-50 text-amber-700";
     case "cancelled":
-    case "refund":
+    case "refunded":
       return "border-rose-200 bg-rose-50 text-rose-700";
     case "unpaid":
       return "border-slate-200 bg-slate-100 text-slate-600";
@@ -167,15 +255,14 @@ function statusPillClasses(status: BookingStatus | PaymentStatus | string) {
   }
 }
 
-function logToneClasses(tone?: BookingCrmLog["tone"]) {
-  switch (tone) {
-    case "success":
-      return "text-emerald-700";
-    case "warning":
-      return "text-amber-700";
-    default:
-      return "text-slate-800";
+function actionToneClasses(action: string) {
+  if (action.includes("saved") || action.includes("payment") || action.includes("confirmed")) {
+    return "text-emerald-700";
   }
+  if (action.includes("edit") || action.includes("cancel")) {
+    return "text-amber-700";
+  }
+  return "text-slate-800";
 }
 
 function numberOrZero(value: number | string) {
@@ -280,13 +367,78 @@ function SectionCard({
   );
 }
 
-export function BookingCrmWorkspace({ initialData, onSave }: Props) {
+function buildChanges(
+  initialData: BookingCrmInitialData,
+  current: {
+    tripTitle: string;
+    customerName: string;
+    customerEmail: string;
+    customerPhone: string;
+    alternatePhone: string;
+    whatsappNumber: string;
+    destination: string;
+    departure: string;
+    startDate: string;
+    endDate: string;
+    duration: string;
+    rooms: string;
+    travellersCount: string;
+    bookingStatus: BookingStatus;
+    paymentStatus: PaymentStatus;
+    tags: string[];
+    pricing: BookingCrmPricing;
+  },
+) {
+  const changes: Array<{
+    field: string;
+    before: string | null;
+    after: string | null;
+  }> = [];
+
+  const pushChange = (field: string, before: string, after: string) => {
+    if (before !== after) {
+      changes.push({ field, before, after });
+    }
+  };
+
+  pushChange("trip_title", initialData.tripTitle, current.tripTitle);
+  pushChange("customer_name", initialData.customerName, current.customerName);
+  pushChange("customer_email", initialData.customerEmail, current.customerEmail);
+  pushChange("customer_phone", initialData.customerPhone, current.customerPhone);
+  pushChange("alternate_phone", initialData.alternatePhone, current.alternatePhone);
+  pushChange("whatsapp_number", initialData.whatsappNumber, current.whatsappNumber);
+  pushChange("destination", initialData.destination, current.destination);
+  pushChange("departure", initialData.departure, current.departure);
+  pushChange("start_date", initialData.startDate, current.startDate);
+  pushChange("end_date", initialData.endDate, current.endDate);
+  pushChange("duration", initialData.duration, current.duration);
+  pushChange("rooms", initialData.rooms, current.rooms);
+  pushChange("travellers_count", initialData.travellersCount, current.travellersCount);
+  pushChange("booking_status", initialData.bookingStatus, current.bookingStatus);
+  pushChange("payment_status", initialData.paymentStatus, current.paymentStatus);
+  pushChange("tags", initialData.tags.join(", "), current.tags.join(", "));
+
+  (Object.keys(current.pricing) as Array<keyof BookingCrmPricing>).forEach((key) => {
+    const before = String(initialData.pricing[key] ?? 0);
+    const after = String(current.pricing[key] ?? 0);
+    pushChange(`pricing.${key}`, before, after);
+  });
+
+  return changes;
+}
+
+export function BookingCrmWorkspace({ initialData, onSave, onLog }: Props) {
   const router = useRouter();
 
   const [isEditEnabled, setIsEditEnabled] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const [tripTitle, setTripTitle] = useState(initialData.tripTitle);
+  const [customerName, setCustomerName] = useState(initialData.customerName);
+  const [customerEmail, setCustomerEmail] = useState(initialData.customerEmail);
+  const [customerPhone, setCustomerPhone] = useState(initialData.customerPhone);
+  const [alternatePhone, setAlternatePhone] = useState(initialData.alternatePhone);
+  const [whatsappNumber, setWhatsappNumber] = useState(initialData.whatsappNumber);
   const [destination, setDestination] = useState(initialData.destination);
   const [departure, setDeparture] = useState(initialData.departure);
   const [startDate, setStartDate] = useState(isoDateInput(initialData.startDate));
@@ -296,6 +448,7 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
   const [travellersCount, setTravellersCount] = useState(initialData.travellersCount);
   const [bookingStatus, setBookingStatus] = useState<BookingStatus>(initialData.bookingStatus);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(initialData.paymentStatus);
+  const [tags, setTags] = useState(initialData.tags.join(", "));
 
   const [pricing, setPricing] = useState<BookingCrmPricing>(
     initialData.pricing ?? {
@@ -311,24 +464,12 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
     },
   );
 
-  const [travellers, setTravellers] = useState<BookingCrmTraveller[]>(
-    initialData.travellers ?? [],
-  );
-
-  const [tripPlan, setTripPlan] = useState<BookingCrmTripDay[]>(
-    initialData.tripPlan ?? [],
-  );
-
-  const [payments, setPayments] = useState<BookingCrmPayment[]>(
-    initialData.payments ?? [],
-  );
-
-  const [notes, setNotes] = useState<BookingCrmNote[]>(
-    initialData.notes ?? [],
-  );
-
-  const [logs, setLogs] = useState<BookingCrmLog[]>(
-    initialData.logs ?? [],
+  const [travellers, setTravellers] = useState<BookingTraveller[]>(initialData.travellers ?? []);
+  const [itinerary, setItinerary] = useState<BookingItineraryItem[]>(initialData.itinerary ?? []);
+  const [payments, setPayments] = useState<BookingPayment[]>(initialData.payments ?? []);
+  const [notes, setNotes] = useState<BookingNote[]>(initialData.notes ?? []);
+  const [activityLogs, setActivityLogs] = useState<BookingActivityLog[]>(
+    initialData.activityLogs ?? [],
   );
 
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -358,49 +499,80 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
 
   const balanceDue = Math.max(0, tripTotal - amountPaid);
 
-  function appendLog(
-    title: string,
-    description: string,
-    tone: BookingCrmLog["tone"] = "default",
-  ) {
+  function appendLocalLog(action: string, summary: string) {
     const now = new Date().toISOString();
 
-    setLogs((prev) => [
+    setActivityLogs((prev) => [
       {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        title,
-        description,
         createdAt: now,
-        tone,
+        actorName: "Admin",
+        actorId: "local",
+        action,
+        entityType: "booking",
+        summary,
+        changes: [],
       },
       ...prev,
     ]);
   }
 
-  function handleEnableEdit() {
+  async function persistLog(action: string, summary: string) {
+    if (!onLog) {
+      appendLocalLog(action, summary);
+      return;
+    }
+
+    const response = await onLog({
+      bookingId: initialData.bookingId,
+      bookingRef: initialData.bookingRef,
+      action,
+      entityType: "booking",
+      summary,
+      changes: [],
+    });
+
+    if (response && response.ok && response.log) {
+      setActivityLogs((prev) => [response.log!, ...prev]);
+      return;
+    }
+
+    appendLocalLog(action, summary);
+  }
+
+  async function handleEnableEdit() {
     if (isEditEnabled) {
       setIsEditEnabled(false);
-      appendLog("EDIT DISABLED", "Edit mode disabled for booking.");
+      await persistLog("edit_disabled", "Edit mode disabled.");
       return;
     }
 
     const confirmed = window.confirm(
-      "Enable edit mode for this booking? Changes will remain local until you save.",
+      "Enable edit mode for this booking? Changes remain local until saved.",
     );
 
     if (!confirmed) return;
 
     setIsEditEnabled(true);
-    appendLog("EDIT ENABLED", "Edit mode enabled for booking.", "warning");
+    await persistLog("edit_enabled", "Edit mode enabled.");
   }
 
   async function handleSaveBooking() {
     try {
       setIsSaving(true);
 
-      const payload: BookingCrmSaveInput = {
-        bookingId: initialData.bookingId,
+      const normalizedTags = tags
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      const changes = buildChanges(initialData, {
         tripTitle,
+        customerName,
+        customerEmail,
+        customerPhone,
+        alternatePhone,
+        whatsappNumber,
         destination,
         departure,
         startDate,
@@ -410,14 +582,51 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
         travellersCount,
         bookingStatus,
         paymentStatus,
+        tags: normalizedTags,
         pricing,
+      });
+
+      const payload: BookingCrmSaveInput = {
+        bookingId: initialData.bookingId,
+        bookingRef: initialData.bookingRef,
+        tripTitle,
+        customerName,
+        customerEmail,
+        customerPhone,
+        alternatePhone,
+        whatsappNumber,
+        destination,
+        departure,
+        startDate,
+        endDate,
+        duration,
+        rooms,
+        travellersCount,
+        bookingStatus,
+        paymentStatus,
+        tags: normalizedTags,
+        notes,
+        payments,
         travellers,
-        tripPlan,
+        itinerary,
+        pricing,
+        changes,
+        pendingLogs: [],
       };
 
-      await onSave?.(payload);
+      const result = await onSave?.(payload);
 
-      appendLog("BOOKING SAVED", "Booking details updated successfully.", "success");
+      if (result && result.ok === false) {
+        window.alert(result.message || "Failed to save booking.");
+        return;
+      }
+
+      if (result?.logs) {
+        setActivityLogs(result.logs);
+      } else {
+        appendLocalLog("booking_saved", "Booking details updated successfully.");
+      }
+
       setIsEditEnabled(false);
     } finally {
       setIsSaving(false);
@@ -426,8 +635,8 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
 
   function handleAddPayment() {
     if (!isEditEnabled) return;
-    const amount = Number(paymentAmount);
 
+    const amount = Number(paymentAmount);
     if (!amount || amount <= 0) {
       window.alert("Enter a valid payment amount.");
       return;
@@ -437,7 +646,7 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
       ? new Date(`${paymentDate}T12:00:00`).toISOString()
       : new Date().toISOString();
 
-    const record: BookingCrmPayment = {
+    const record: BookingPayment = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       amount,
       mode: paymentMode,
@@ -451,15 +660,12 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
     setPaymentDate("");
     setPaymentNote("");
 
-    appendLog(
-      "PAYMENT ADDED",
-      `Payment added: ${formatCurrency(record.amount)} via ${record.mode}.`,
-      "success",
-    );
+    appendLocalLog("payment_added", `Payment added: ${formatCurrency(record.amount)} via ${record.mode}.`);
   }
 
   function handleAddNote() {
     if (!isEditEnabled) return;
+
     const text = newNote.trim();
     if (!text) return;
 
@@ -475,21 +681,17 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
     ]);
 
     setNewNote("");
-    appendLog("NOTE ADDED", "Internal note added.", "default");
+    appendLocalLog("note_added", "Internal note added.");
   }
 
-  function updateTraveller(
-    travellerId: string,
-    field: keyof BookingCrmTraveller,
-    value: string,
-  ) {
+  function updateTraveller(travellerId: string, field: keyof BookingTraveller, value: string) {
     setTravellers((prev) =>
       prev.map((item) => (item.id === travellerId ? { ...item, [field]: value } : item)),
     );
   }
 
-  function updateTripDay(dayId: string, field: keyof BookingCrmTripDay, value: string) {
-    setTripPlan((prev) =>
+  function updateItinerary(dayId: string, field: keyof BookingItineraryItem, value: string | number) {
+    setItinerary((prev) =>
       prev.map((item) => (item.id === dayId ? { ...item, [field]: value } : item)),
     );
   }
@@ -563,212 +765,145 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
                 >
                   {paymentStatus}
                 </span>
-                <span className="rounded-full bg-slate-100 px-4 py-2 text-[14px] font-semibold tracking-[0.18em] text-slate-700">
-                  TAGS
-                </span>
+                {(tags || "TAGS").split(",").filter(Boolean).slice(0, 3).map((tag) => (
+                  <span
+                    key={tag.trim()}
+                    className="rounded-full bg-slate-100 px-4 py-2 text-[14px] font-semibold tracking-[0.08em] text-slate-700"
+                  >
+                    {tag.trim()}
+                  </span>
+                ))}
               </div>
 
               <h1 className="text-[56px] font-semibold leading-none tracking-[-0.05em] text-slate-950">
-                {initialData.customerName}
+                {customerName}
               </h1>
 
               <div className="mt-5 flex flex-wrap gap-x-7 gap-y-2 text-[17px] text-slate-500">
-                <span>{initialData.customerEmail}</span>
-                <span>{initialData.customerPhone}</span>
+                <span>{customerEmail}</span>
+                <span>{customerPhone}</span>
                 <span>{destination}</span>
               </div>
             </section>
 
-            <SectionCard title="Trip details">
+            <SectionCard title="Customer and trip details">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div>
                   <FieldLabel>Trip title</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    value={tripTitle}
-                    onChange={(e) => setTripTitle(e.target.value)}
-                  />
+                  <TextInput editable={isEditEnabled} value={tripTitle} onChange={(e) => setTripTitle(e.target.value)} />
+                </div>
+
+                <div>
+                  <FieldLabel>Customer name</FieldLabel>
+                  <TextInput editable={isEditEnabled} value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+                </div>
+
+                <div>
+                  <FieldLabel>Customer email</FieldLabel>
+                  <TextInput editable={isEditEnabled} value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+                </div>
+
+                <div>
+                  <FieldLabel>Customer phone</FieldLabel>
+                  <TextInput editable={isEditEnabled} value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+                </div>
+
+                <div>
+                  <FieldLabel>Alternate phone</FieldLabel>
+                  <TextInput editable={isEditEnabled} value={alternatePhone} onChange={(e) => setAlternatePhone(e.target.value)} />
+                </div>
+
+                <div>
+                  <FieldLabel>Whatsapp number</FieldLabel>
+                  <TextInput editable={isEditEnabled} value={whatsappNumber} onChange={(e) => setWhatsappNumber(e.target.value)} />
                 </div>
 
                 <div>
                   <FieldLabel>Destination</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
-                  />
+                  <TextInput editable={isEditEnabled} value={destination} onChange={(e) => setDestination(e.target.value)} />
                 </div>
 
                 <div>
                   <FieldLabel>Departure</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    value={departure}
-                    onChange={(e) => setDeparture(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>Start date</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    type={isEditEnabled ? "date" : "text"}
-                    value={isEditEnabled ? startDate : startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>End date</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    type={isEditEnabled ? "date" : "text"}
-                    value={isEditEnabled ? endDate : endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                  />
+                  <TextInput editable={isEditEnabled} value={departure} onChange={(e) => setDeparture(e.target.value)} />
                 </div>
 
                 <div>
                   <FieldLabel>Duration</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    value={duration}
-                    onChange={(e) => setDuration(e.target.value)}
-                  />
+                  <TextInput editable={isEditEnabled} value={duration} onChange={(e) => setDuration(e.target.value)} />
+                </div>
+
+                <div>
+                  <FieldLabel>Start date</FieldLabel>
+                  <TextInput editable={isEditEnabled} type={isEditEnabled ? "date" : "text"} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                </div>
+
+                <div>
+                  <FieldLabel>End date</FieldLabel>
+                  <TextInput editable={isEditEnabled} type={isEditEnabled ? "date" : "text"} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
                 </div>
 
                 <div>
                   <FieldLabel>Rooms</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    value={rooms}
-                    onChange={(e) => setRooms(e.target.value)}
-                  />
+                  <TextInput editable={isEditEnabled} value={rooms} onChange={(e) => setRooms(e.target.value)} />
                 </div>
 
                 <div>
                   <FieldLabel>Travellers</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    value={travellersCount}
-                    onChange={(e) => setTravellersCount(e.target.value)}
-                  />
+                  <TextInput editable={isEditEnabled} value={travellersCount} onChange={(e) => setTravellersCount(e.target.value)} />
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
-                  <div>
-                    <FieldLabel>Booking status</FieldLabel>
-                    <Select
-                      editable={isEditEnabled}
-                      value={bookingStatus}
-                      onChange={(e) => setBookingStatus(e.target.value as BookingStatus)}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </Select>
-                  </div>
+                <div>
+                  <FieldLabel>Tags</FieldLabel>
+                  <TextInput editable={isEditEnabled} value={tags} onChange={(e) => setTags(e.target.value)} placeholder="vip, repeat, urgent" />
+                </div>
 
-                  <div>
-                    <FieldLabel>Payment status</FieldLabel>
-                    <Select
-                      editable={isEditEnabled}
-                      value={paymentStatus}
-                      onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
-                    >
-                      <option value="paid">Paid</option>
-                      <option value="partial">Partial</option>
-                      <option value="refund">Refund</option>
-                      <option value="unpaid">Unpaid</option>
-                    </Select>
-                  </div>
+                <div>
+                  <FieldLabel>Booking status</FieldLabel>
+                  <Select editable={isEditEnabled} value={bookingStatus} onChange={(e) => setBookingStatus(e.target.value as BookingStatus)}>
+                    <option value="pending">Pending</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </Select>
+                </div>
+
+                <div>
+                  <FieldLabel>Payment status</FieldLabel>
+                  <Select editable={isEditEnabled} value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}>
+                    <option value="unpaid">Unpaid</option>
+                    <option value="partial">Partial</option>
+                    <option value="paid">Paid</option>
+                    <option value="refunded">Refunded</option>
+                  </Select>
                 </div>
               </div>
             </SectionCard>
 
             <SectionCard title="Pricing" subtitle="Compact commercial edit block.">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <div>
-                  <FieldLabel>Package base</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    type="number"
-                    value={pricing.packageBase}
-                    onChange={(e) => updatePricing("packageBase", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Flights</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    type="number"
-                    value={pricing.flights}
-                    onChange={(e) => updatePricing("flights", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Hotels</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    type="number"
-                    value={pricing.hotels}
-                    onChange={(e) => updatePricing("hotels", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Transfers</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    type="number"
-                    value={pricing.transfers}
-                    onChange={(e) => updatePricing("transfers", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Sightseeing</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    type="number"
-                    value={pricing.sightseeing}
-                    onChange={(e) => updatePricing("sightseeing", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Meals</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    type="number"
-                    value={pricing.meals}
-                    onChange={(e) => updatePricing("meals", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Service fee</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    type="number"
-                    value={pricing.serviceFee}
-                    onChange={(e) => updatePricing("serviceFee", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Extra</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    type="number"
-                    value={pricing.extra}
-                    onChange={(e) => updatePricing("extra", e.target.value)}
-                  />
-                </div>
-                <div className="sm:col-span-2 xl:col-span-1">
-                  <FieldLabel>Discount</FieldLabel>
-                  <TextInput
-                    editable={isEditEnabled}
-                    type="number"
-                    value={pricing.discount}
-                    onChange={(e) => updatePricing("discount", e.target.value)}
-                  />
-                </div>
+                {(
+                  [
+                    ["packageBase", "Package base"],
+                    ["flights", "Flights"],
+                    ["hotels", "Hotels"],
+                    ["transfers", "Transfers"],
+                    ["sightseeing", "Sightseeing"],
+                    ["meals", "Meals"],
+                    ["serviceFee", "Service fee"],
+                    ["extra", "Extra"],
+                    ["discount", "Discount"],
+                  ] as Array<[keyof BookingCrmPricing, string]>
+                ).map(([field, label]) => (
+                  <div key={field}>
+                    <FieldLabel>{label}</FieldLabel>
+                    <TextInput
+                      editable={isEditEnabled}
+                      type="number"
+                      value={pricing[field]}
+                      onChange={(e) => updatePricing(field, e.target.value)}
+                    />
+                  </div>
+                ))}
               </div>
             </SectionCard>
 
@@ -787,38 +922,22 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
                       <div className="grid gap-4 md:grid-cols-3">
                         <div>
                           <FieldLabel>Name</FieldLabel>
-                          <TextInput
-                            editable={isEditEnabled}
-                            value={traveller.name}
-                            onChange={(e) =>
-                              updateTraveller(traveller.id, "name", e.target.value)
-                            }
-                          />
+                          <TextInput editable={isEditEnabled} value={traveller.name} onChange={(e) => updateTraveller(traveller.id, "name", e.target.value)} />
                         </div>
 
                         <div>
                           <FieldLabel>Age</FieldLabel>
-                          <TextInput
-                            editable={isEditEnabled}
-                            value={traveller.age}
-                            onChange={(e) =>
-                              updateTraveller(traveller.id, "age", e.target.value)
-                            }
-                          />
+                          <TextInput editable={isEditEnabled} value={traveller.age} onChange={(e) => updateTraveller(traveller.id, "age", e.target.value)} />
                         </div>
 
                         <div>
-                          <FieldLabel>Type</FieldLabel>
-                          <Select
-                            editable={isEditEnabled}
-                            value={traveller.type}
-                            onChange={(e) =>
-                              updateTraveller(traveller.id, "type", e.target.value)
-                            }
-                          >
+                          <FieldLabel>Gender / Type</FieldLabel>
+                          <Select editable={isEditEnabled} value={traveller.gender} onChange={(e) => updateTraveller(traveller.id, "gender", e.target.value)}>
                             <option value="Adult">Adult</option>
                             <option value="Child">Child</option>
                             <option value="Infant">Infant</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
                           </Select>
                         </div>
                       </div>
@@ -832,21 +951,12 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
                       <FieldLabel>Amount</FieldLabel>
-                      <TextInput
-                        editable={isEditEnabled}
-                        type="number"
-                        value={paymentAmount}
-                        onChange={(e) => setPaymentAmount(e.target.value)}
-                      />
+                      <TextInput editable={isEditEnabled} type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} />
                     </div>
 
                     <div>
                       <FieldLabel>Mode</FieldLabel>
-                      <Select
-                        editable={isEditEnabled}
-                        value={paymentMode}
-                        onChange={(e) => setPaymentMode(e.target.value)}
-                      >
+                      <Select editable={isEditEnabled} value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
                         <option value="UPI">UPI</option>
                         <option value="Cash">Cash</option>
                         <option value="Bank Transfer">Bank Transfer</option>
@@ -856,22 +966,12 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
 
                     <div>
                       <FieldLabel>Date</FieldLabel>
-                      <TextInput
-                        editable={isEditEnabled}
-                        type={isEditEnabled ? "date" : "text"}
-                        value={paymentDate}
-                        onChange={(e) => setPaymentDate(e.target.value)}
-                        placeholder="dd / mm / yyyy"
-                      />
+                      <TextInput editable={isEditEnabled} type={isEditEnabled ? "date" : "text"} value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} placeholder="dd / mm / yyyy" />
                     </div>
 
                     <div>
                       <FieldLabel>Note</FieldLabel>
-                      <TextInput
-                        editable={isEditEnabled}
-                        value={paymentNote}
-                        onChange={(e) => setPaymentNote(e.target.value)}
-                      />
+                      <TextInput editable={isEditEnabled} value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} />
                     </div>
                   </div>
 
@@ -886,31 +986,19 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
 
                   <div className="space-y-3">
                     {payments.map((payment) => (
-                      <div
-                        key={payment.id}
-                        className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
-                      >
+                      <div key={payment.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                         <div className="text-[15px] font-semibold text-slate-900">
                           {formatCurrency(payment.amount)} · {payment.mode}
                         </div>
-                        <div className="mt-1 text-sm text-slate-500">
-                          {formatDateTime(payment.date)}
-                        </div>
-                        {payment.note ? (
-                          <div className="mt-1 text-sm text-slate-600">{payment.note}</div>
-                        ) : null}
+                        <div className="mt-1 text-sm text-slate-500">{formatDateTime(payment.date)}</div>
+                        {payment.note ? <div className="mt-1 text-sm text-slate-600">{payment.note}</div> : null}
                       </div>
                     ))}
                   </div>
 
                   <div>
                     <FieldLabel>New note</FieldLabel>
-                    <TextArea
-                      editable={isEditEnabled}
-                      value={newNote}
-                      onChange={(e) => setNewNote(e.target.value)}
-                      placeholder="Add internal note..."
-                    />
+                    <TextArea editable={isEditEnabled} value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="Add internal note..." />
                   </div>
 
                   <button
@@ -924,14 +1012,9 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
 
                   <div className="space-y-3">
                     {notes.map((note) => (
-                      <div
-                        key={note.id}
-                        className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
-                      >
+                      <div key={note.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                         <div className="text-[15px] text-slate-700">{note.text}</div>
-                        <div className="mt-1 text-sm text-slate-500">
-                          {formatDateTime(note.createdAt)}
-                        </div>
+                        <div className="mt-1 text-sm text-slate-500">{formatDateTime(note.createdAt)}</div>
                       </div>
                     ))}
                   </div>
@@ -939,58 +1022,33 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
               </SectionCard>
             </div>
 
-            <SectionCard
-              title="Trip plan"
-              subtitle="Compact day cards first. Use builder only if deeper customization is needed."
-              action={
-                <button
-                  type="button"
-                  className="inline-flex h-11 items-center rounded-full border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Open trip builder
-                </button>
-              }
-            >
+            <SectionCard title="Itinerary" subtitle="Compact day cards first.">
               <div className="space-y-4">
-                {tripPlan.map((day) => (
-                  <div
-                    key={day.id}
-                    className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-4"
-                  >
-                    <div className="mb-4 text-sm font-semibold text-slate-700">
-                      {day.dayLabel}
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-2">
+                {itinerary.map((day) => (
+                  <div key={day.id} className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="mb-4 grid gap-4 md:grid-cols-3">
+                      <div>
+                        <FieldLabel>Day</FieldLabel>
+                        <TextInput
+                          editable={isEditEnabled}
+                          type="number"
+                          value={day.day}
+                          onChange={(e) => updateItinerary(day.id, "day", Number(e.target.value || 0))}
+                        />
+                      </div>
                       <div>
                         <FieldLabel>Title</FieldLabel>
-                        <TextInput
-                          editable={isEditEnabled}
-                          value={day.title}
-                          onChange={(e) => updateTripDay(day.id, "title", e.target.value)}
-                        />
+                        <TextInput editable={isEditEnabled} value={day.title} onChange={(e) => updateItinerary(day.id, "title", e.target.value)} />
                       </div>
-
                       <div>
                         <FieldLabel>City</FieldLabel>
-                        <TextInput
-                          editable={isEditEnabled}
-                          value={day.city}
-                          onChange={(e) => updateTripDay(day.id, "city", e.target.value)}
-                        />
+                        <TextInput editable={isEditEnabled} value={day.city} onChange={(e) => updateItinerary(day.id, "city", e.target.value)} />
                       </div>
                     </div>
 
-                    <div className="mt-4">
+                    <div>
                       <FieldLabel>Description</FieldLabel>
-                      <TextArea
-                        editable={isEditEnabled}
-                        value={day.description}
-                        onChange={(e) =>
-                          updateTripDay(day.id, "description", e.target.value)
-                        }
-                        className="min-h-[110px]"
-                      />
+                      <TextArea editable={isEditEnabled} value={day.description} onChange={(e) => updateItinerary(day.id, "description", e.target.value)} className="min-h-[110px]" />
                     </div>
                   </div>
                 ))}
@@ -999,20 +1057,15 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
 
             <SectionCard title="Past bookings">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {(initialData.pastBookings ?? []).length === 0 ? (
+                {initialData.pastBookings.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
                     No past bookings found.
                   </div>
                 ) : (
-                  (initialData.pastBookings ?? []).map((item) => (
-                    <div
-                      key={item.bookingRef}
-                      className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4"
-                    >
+                  initialData.pastBookings.map((item) => (
+                    <div key={item.id} className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="text-sm font-semibold text-slate-800">
-                          {item.bookingRef}
-                        </div>
+                        <div className="text-sm font-semibold text-slate-800">{item.bookingRef}</div>
                         <span
                           className={cn(
                             "rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]",
@@ -1023,11 +1076,9 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
                         </span>
                       </div>
                       <div className="mt-3 text-[15px] text-slate-700">{item.destination}</div>
-                      <div className="mt-1 text-sm text-slate-500">
-                        {formatDateTime(item.createdAt)}
-                      </div>
+                      <div className="mt-1 text-sm text-slate-500">{formatDateTime(item.createdAt)}</div>
                       <div className="mt-4 text-right text-lg font-semibold text-slate-900">
-                        {formatCurrency(item.amount)}
+                        {formatCurrency(item.totalAmount)}
                       </div>
                     </div>
                   ))
@@ -1084,15 +1135,15 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
               <section className="rounded-[32px] border border-[#ded6c9] bg-white p-6">
                 <div className="mb-5 flex items-center justify-between gap-3">
                   <h3 className="text-[22px] font-semibold tracking-[-0.03em] text-slate-900">
-                    Logs
+                    Activity
                   </h3>
                   <button
                     type="button"
                     onClick={() => {
-                      const content = logs
+                      const content = activityLogs
                         .map(
                           (log) =>
-                            `${log.title}\n${log.description}\n${formatDateTime(log.createdAt)}`,
+                            `${log.summary}\n${log.actorName}\n${formatDateTime(log.createdAt)}`,
                         )
                         .join("\n\n----------------\n\n");
 
@@ -1105,27 +1156,24 @@ export function BookingCrmWorkspace({ initialData, onSave }: Props) {
                 </div>
 
                 <div className="space-y-3">
-                  {logs.slice(0, 4).map((log) => (
-                    <div
-                      key={log.id}
-                      className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4"
-                    >
+                  {activityLogs.slice(0, 4).map((log) => (
+                    <div key={log.id} className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4">
                       <div
                         className={cn(
                           "text-[12px] font-bold uppercase tracking-[0.22em]",
-                          logToneClasses(log.tone),
+                          actionToneClasses(log.action),
                         )}
                       >
-                        {log.title}
+                        {log.action.replaceAll("_", " ")}
                       </div>
-                      <div className="mt-2 text-[15px] text-slate-800">{log.description}</div>
+                      <div className="mt-2 text-[15px] text-slate-800">{log.summary}</div>
                       <div className="mt-2 text-sm text-slate-500">
-                        {formatDateTime(log.createdAt)}
+                        {log.actorName} · {formatDateTime(log.createdAt)}
                       </div>
                     </div>
                   ))}
 
-                  {logs.length === 0 ? (
+                  {activityLogs.length === 0 ? (
                     <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-500">
                       No logs available.
                     </div>

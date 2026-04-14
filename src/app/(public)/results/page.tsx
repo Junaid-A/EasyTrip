@@ -86,7 +86,7 @@ export default function ResultsPage() {
       return bScore - aScore;
     });
 
-  const recommendedPackages = getRecommendedPackages(scoredPackages);
+  const recommendedPackages = getRecommendedPackages(scoredPackages) as typeof scoredPackages;
 
   function handlePackageSelect(item: (typeof readyPackages)[number]) {
     selectPackage({
@@ -230,7 +230,7 @@ export default function ResultsPage() {
                       <div className="p-6 sm:p-8">
                         <div className="flex flex-wrap items-center gap-3">
                           <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
-                            {item.tag}
+                              {item.recommendedLabel}
                           </span>
                           {isSelected ? (
                             <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">

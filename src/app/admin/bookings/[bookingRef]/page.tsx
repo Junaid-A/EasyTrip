@@ -8,6 +8,8 @@ import {
   type BookingCrmInitialData,
   type BookingCrmSaveInput,
   type PastBookingItem,
+  type BookingStatus,
+  type PaymentStatus,
 } from "@/components/admin/bookings/booking-crm-workspace";
 
 type PageProps = {
@@ -60,16 +62,29 @@ function titleCase(input: string) {
   return input.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function normalizeStatus(value?: string | null) {
+function normalizeStatus(value?: string | null): BookingStatus {
   const status = (value || "pending").toLowerCase();
-  return ["pending", "confirmed", "cancelled"].includes(status) ? status : "pending";
+
+  if (status === "pending" || status === "confirmed" || status === "cancelled") {
+    return status;
+  }
+
+  return "pending";
 }
 
-function normalizePaymentStatus(value?: string | null) {
+function normalizePaymentStatus(value?: string | null): PaymentStatus {
   const status = (value || "unpaid").toLowerCase();
-  return ["unpaid", "partial", "paid", "refunded"].includes(status)
-    ? status
-    : "unpaid";
+
+  if (
+    status === "unpaid" ||
+    status === "partial" ||
+    status === "paid" ||
+    status === "refunded"
+  ) {
+    return status;
+  }
+
+  return "unpaid";
 }
 
 function normalizePricing(row: UnknownRecord) {
@@ -448,9 +463,9 @@ export default async function AdminBookingCrmPage({ params }: PageProps) {
     "use server";
 
     const currentUser = await getCurrentUser();
-    if (!currentUser) {
-      return { ok: false, message: "Not authorized." };
-    }
+if (!currentUser?.user) {
+  return { ok: false, message: "Not authorized." };
+}
 
     const serverSupabase = await createClient();
     const actorName =
@@ -506,9 +521,9 @@ export default async function AdminBookingCrmPage({ params }: PageProps) {
     "use server";
 
     const currentUser = await getCurrentUser();
-    if (!currentUser) {
-      return { ok: false, message: "Not authorized." };
-    }
+if (!currentUser?.user) {
+  return { ok: false, message: "Not authorized." };
+}
 
     const serverSupabase = await createClient();
 

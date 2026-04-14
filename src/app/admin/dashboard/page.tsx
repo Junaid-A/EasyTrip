@@ -987,7 +987,18 @@ export default function AdminDashboardPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e7e1d8" />
                   <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} />
                   <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} />
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Tooltip
+  formatter={(value) => {
+    const numericValue =
+      typeof value === "number"
+        ? value
+        : Number.isFinite(Number(value))
+          ? Number(value)
+          : 0;
+
+    return formatCurrency(numericValue);
+  }}
+/>
                   {(revenueFilter === "all" || revenueFilter === "received") && (
                     <Bar dataKey="received" stackId="a" fill="#10b981" radius={[6, 6, 0, 0]} />
                   )}
